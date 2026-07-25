@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Plus, Search, X, ChevronRight, Upload, FileText, Check, Loader2, Layers } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { calcularCMV, custoPorKgReceita, formatBRL, formatNumber } from "@/lib/calc";
+import { calcularCMV, custoPorKgReceita, converterQuantidade, formatBRL, formatNumber } from "@/lib/calc";
 import { extrairTextoPDF } from "@/lib/pdfText";
 import { parseTextoReceita, encontrarMateriaPrimaPorNome } from "@/lib/parseReceita";
 
@@ -121,6 +121,7 @@ function ReceitaDetalhe({ receita }) {
   const [erroPdf, setErroPdf] = useState("");
   const [pdfPendente, setPdfPendente] = useState(null); // { arquivo, itensDetectados }
   const [salvandoPdf, setSalvandoPdf] = useState(false);
+  const enviandoRef = useRef(false); // trava síncrona contra duplo clique (o state salvandoPdf é assíncrono e não pega cliques rápidos)
 
   // Resultados de busca combinam Matérias-Primas e outras Receitas (sub-receitas,
   // ex: uma massa ou um recheio usados como ingrediente de outra receita).
@@ -188,6 +189,12 @@ function ReceitaDetalhe({ receita }) {
     atualizarItensReceita(receita.id, novosItens);
   }
 
+  function limparTodosIngredientes() {
+    if (!confirm("Remover todos os ingredientes desta receita? Essa ação não pode ser desfeita.")) return;
+    setItens([]);
+    atualizarItensReceita(receita.id, []);
+  }
+
   async function handleArquivoPdf(e) {
     const arquivo = e.target.files?.[0];
     e.target.value = ""; // permite selecionar o mesmo arquivo de novo depois
@@ -234,6 +241,8 @@ function ReceitaDetalhe({ receita }) {
 
   async function confirmarPdf() {
     if (!pdfPendente) return;
+    if (enviandoRef.current) return; // já está processando, ignora clique repetido
+    enviandoRef.current = true;
     setSalvandoPdf(true);
     try {
       // 1) garante que cada ingrediente tem uma matéria-prima vinculada
@@ -273,6 +282,7 @@ function ReceitaDetalhe({ receita }) {
       setErroPdf("Deu erro ao salvar. Confira sua conexão com a planilha e tenta de novo.");
     } finally {
       setSalvandoPdf(false);
+      enviandoRef.current = false;
     }
   }
 
@@ -457,6 +467,14 @@ function ReceitaDetalhe({ receita }) {
         )}
       </div>
 
+      {itens.length > 0 && (
+        <div className="flex justify-end mt-2">
+          <button onClick={limparTodosIngredientes} className="text-xs text-muted hover:text-brick underline">
+            Limpar todos os ingredientes
+          </button>
+        </div>
+      )}
+
       <table className="w-full text-sm mt-4">
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-muted border-b border-line">
@@ -476,6 +494,11 @@ function ReceitaDetalhe({ receita }) {
             const valorUnitario = ehSubReceita
               ? custoPorKgReceita(subReceita, receitasById, materiasPrimasById)
               : mp?.preco_atual || 0;
+            const unidadePreco = ehSubReceita ? "kg" : mp?.unidade || item.unidade;
+            const quantidadeParaCusto = ehSubReceita
+              ? item.quantidade
+              : converterQuantidade(item.quantidade, item.unidade, mp?.unidade);
+            const valorTotal = quantidadeParaCusto * valorUnitario;
             return (
               <tr key={item.materia_prima_id} className="border-b border-line last:border-0">
                 <td className="py-2">
@@ -494,12 +517,16 @@ function ReceitaDetalhe({ receita }) {
                   />
                 </td>
                 <td className="py-2 text-muted">{item.unidade}</td>
-                <td className="py-2 text-right font-mono-num">{formatBRL(valorUnitario)}</td>
-                <td className="py-2 text-right font-mono-num font-medium">{formatBRL(item.quantidade * valorUnitario)}</td>
+                <td className="py-2 text-right font-mono-num">
+                  {formatBRL(valorUnitario)}
+                  <span className="text-muted">/{unidadePreco}</span>
+                </td>
+                <td className="py-2 text-right font-mono-num font-medium">{formatBRL(valorTotal)}</td>
                 <td className="py-2 text-right">
                   <button onClick={() => removerIngrediente(item.materia_prima_id)} className="text-muted hover:text-brick">
                     <X size={14} />
                   </button>
+
                 </td>
               </tr>
             );
