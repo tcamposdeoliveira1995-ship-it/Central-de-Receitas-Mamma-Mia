@@ -5,6 +5,36 @@
 //   { tipo: "receita", materia_prima_id: <id da sub-receita>, quantidade (kg), unidade: "kg" }
 // Itens antigos sem `tipo` são tratados como matéria-prima (compatibilidade).
 
+// O preço de uma matéria-prima é sempre por `mp.unidade` (ex: R$/kg). Se o
+// ingrediente da receita foi lançado numa unidade diferente mas da mesma
+// família (ex: 500 g numa matéria-prima precificada por kg), convertemos
+// antes de multiplicar — senão 500 g vira "500 kg" no cálculo, inflando o
+// custo em até 1000x. Entre famílias diferentes (ex: kg e L) não dá pra
+// converter sem densidade, então mantemos a quantidade como está.
+function familiaUnidade(unidade) {
+  const u = (unidade || "").toLowerCase();
+  if (u === "kg" || u === "g") return "massa";
+  if (u === "l" || u === "ml") return "volume";
+  return "contagem";
+}
+
+export function converterQuantidade(quantidade, deUnidade, paraUnidade) {
+  const de = (deUnidade || "").toLowerCase();
+  const para = (paraUnidade || "").toLowerCase();
+  if (!de || !para || de === para) return quantidade;
+  if (familiaUnidade(de) !== familiaUnidade(para)) return quantidade;
+
+  if (familiaUnidade(de) === "massa") {
+    const emGramas = de === "kg" ? quantidade * 1000 : quantidade;
+    return para === "kg" ? emGramas / 1000 : emGramas;
+  }
+  if (familiaUnidade(de) === "volume") {
+    const emMl = de === "l" ? quantidade * 1000 : quantidade;
+    return para === "l" ? emMl / 1000 : emMl;
+  }
+  return quantidade;
+}
+
 export function custoIngredientes(itens, materiasPrimasById, receitasById = {}, visitados = new Set()) {
   return itens.reduce((total, item) => {
     if (item.tipo === "receita") {
@@ -14,8 +44,9 @@ export function custoIngredientes(itens, materiasPrimasById, receitasById = {}, 
       return total + item.quantidade * custoPorKg;
     }
     const mp = materiasPrimasById[item.materia_prima_id];
-    const precoUnitario = mp ? mp.preco_atual : 0;
-    return total + item.quantidade * precoUnitario;
+    if (!mp) return total;
+    const quantidadeNaUnidadeDoPreco = converterQuantidade(item.quantidade, item.unidade, mp.unidade);
+    return total + quantidadeNaUnidadeDoPreco * mp.preco_atual;
   }, 0);
 }
 
