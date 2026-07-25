@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import { isDemoMode, fetchAll, postAction } from "./sheetsClient";
+import { arquivoParaBase64 } from "./pdfText";
 import * as seed from "./seed";
 
 const StoreContext = createContext(null);
@@ -46,6 +47,12 @@ export function StoreProvider({ children }) {
     for (const mp of materiasPrimas) map[mp.id] = mp;
     return map;
   }, [materiasPrimas]);
+
+  const receitasById = useMemo(() => {
+    const map = {};
+    for (const r of receitas) map[r.id] = r;
+    return map;
+  }, [receitas]);
 
   const atualizarPrecoMateriaPrima = useCallback(async (id, novoPreco) => {
     const dataHoje = new Date().toISOString().slice(0, 10);
@@ -116,6 +123,45 @@ export function StoreProvider({ children }) {
     setReceitas((prev) => prev.map((r) => (r.id === receitaId ? { ...r, itens } : r)));
   }, []);
 
+  const enviarFichaPdf = useCallback(async (receitaId, arquivo) => {
+    const dataHoje = new Date().toISOString().slice(0, 10);
+
+    if (!isDemoMode) {
+      const base64 = await arquivoParaBase64(arquivo);
+      const resultado = await postAction("uploadFichaPDF", {
+        receita_id: receitaId,
+        nome_arquivo: arquivo.name,
+        base64,
+      });
+      setReceitas((prev) =>
+        prev.map((r) =>
+          r.id === receitaId
+            ? { ...r, pdfs: [...(r.pdfs || []), { nome_arquivo: arquivo.name, url: resultado.url, data: dataHoje }] }
+            : r
+        )
+      );
+      return resultado;
+    }
+
+    // Modo demonstração: gera um link local só pra essa sessão (não persiste).
+    const url = URL.createObjectURL(arquivo);
+    setReceitas((prev) =>
+      prev.map((r) =>
+        r.id === receitaId ? { ...r, pdfs: [...(r.pdfs || []), { nome_arquivo: arquivo.name, url, data: dataHoje }] } : r
+      )
+    );
+    return { url };
+  }, []);
+
+  const atualizarRendimentoReceita = useCallback(async (receitaId, rendimento) => {
+    if (!isDemoMode) {
+      await postAction("updateRendimentoReceita", { receita_id: receitaId, ...rendimento });
+    }
+    setReceitas((prev) =>
+      prev.map((r) => (r.id === receitaId ? { ...r, rendimento: { ...r.rendimento, ...rendimento } } : r))
+    );
+  }, []);
+
   const value = {
     loading,
     categorias,
@@ -123,11 +169,14 @@ export function StoreProvider({ children }) {
     materiasPrimas,
     materiasPrimasById,
     receitas,
+    receitasById,
     producoes,
     atualizarPrecoMateriaPrima,
     adicionarMateriaPrima,
     adicionarReceita,
     atualizarItensReceita,
+    enviarFichaPdf,
+    atualizarRendimentoReceita,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
