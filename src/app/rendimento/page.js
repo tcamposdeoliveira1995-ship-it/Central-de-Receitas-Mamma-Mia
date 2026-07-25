@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Save, Check, Loader2 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { calcularCMV, calcularRendimento, formatBRL, formatNumber } from "@/lib/calc";
 
 export default function RendimentoPage() {
-  const { receitas, materiasPrimasById } = useStore();
+  const { receitas, materiasPrimasById, receitasById, atualizarRendimentoReceita } = useStore();
   const [receitaId, setReceitaId] = useState(receitas[0]?.id ?? "");
   const receita = receitas.find((r) => r.id === receitaId);
 
@@ -14,6 +15,8 @@ export default function RendimentoPage() {
     pesoFinal: receita?.rendimento?.peso_final || 0,
     pesoUnitario: receita?.rendimento?.peso_unitario || 0,
   }));
+  const [salvando, setSalvando] = useState(false);
+  const [salvo, setSalvo] = useState(false);
 
   function selecionarReceita(id) {
     const r = receitas.find((x) => x.id === id);
@@ -23,6 +26,7 @@ export default function RendimentoPage() {
       pesoFinal: r?.rendimento?.peso_final || 0,
       pesoUnitario: r?.rendimento?.peso_unitario || 0,
     });
+    setSalvo(false);
   }
 
   const cmv = useMemo(() => {
@@ -32,8 +36,9 @@ export default function RendimentoPage() {
       embalagemCusto: receita.embalagem_custo || 0,
       quantidadeProducao: 1, // custo total, não unitário
       materiasPrimasById,
+      receitasById,
     });
-  }, [receita, materiasPrimasById]);
+  }, [receita, materiasPrimasById, receitasById]);
 
   const resultado = calcularRendimento({
     pesoIngredientes: pesos.pesoIngredientes,
@@ -44,6 +49,23 @@ export default function RendimentoPage() {
 
   function set(field, value) {
     setPesos((p) => ({ ...p, [field]: parseFloat(value) || 0 }));
+    setSalvo(false);
+  }
+
+  async function salvar() {
+    if (!receita) return;
+    setSalvando(true);
+    try {
+      await atualizarRendimentoReceita(receita.id, {
+        peso_ingredientes: pesos.pesoIngredientes,
+        peso_final: pesos.pesoFinal,
+        peso_unitario: pesos.pesoUnitario,
+        quantidade_produzida: resultado.quantidadeProduzida,
+      });
+      setSalvo(true);
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -51,6 +73,10 @@ export default function RendimentoPage() {
       <header className="mb-6">
         <p className="text-xs uppercase tracking-widest text-gold font-medium">Módulo 6</p>
         <h1 className="font-display text-3xl mt-1">Rendimento</h1>
+        <p className="text-sm text-muted mt-1">
+          Esses pesos definem o peso final da receita — que é a base usada quando ela é aproveitada como
+          ingrediente de outra receita (ex: uma massa dentro de um salgado).
+        </p>
       </header>
 
       <label className="text-xs text-muted block mb-4">
@@ -67,28 +93,46 @@ export default function RendimentoPage() {
       </label>
 
       {receita && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="bg-surface border border-line rounded-lg p-5">
-            <h2 className="font-display text-lg mb-4">Entrada — pesos (kg)</h2>
-            <div className="space-y-3">
-              <Campo label="Peso dos ingredientes" value={pesos.pesoIngredientes} onChange={(v) => set("pesoIngredientes", v)} />
-              <Campo label="Peso final (pronto)" value={pesos.pesoFinal} onChange={(v) => set("pesoFinal", v)} />
-              <Campo label="Peso unitário (por unidade)" value={pesos.pesoUnitario} onChange={(v) => set("pesoUnitario", v)} step="0.001" />
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-surface border border-line rounded-lg p-5">
+              <h2 className="font-display text-lg mb-4">Entrada — pesos (kg)</h2>
+              <div className="space-y-3">
+                <Campo label="Peso dos ingredientes" value={pesos.pesoIngredientes} onChange={(v) => set("pesoIngredientes", v)} />
+                <Campo label="Peso final (pronto)" value={pesos.pesoFinal} onChange={(v) => set("pesoFinal", v)} />
+                <Campo label="Peso unitário (por unidade)" value={pesos.pesoUnitario} onChange={(v) => set("pesoUnitario", v)} step="0.001" />
+              </div>
+            </div>
+
+            <div className="bg-surface border border-line rounded-lg p-5">
+              <h2 className="font-display text-lg mb-4">Sistema calcula</h2>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <Resultado label="Rendimento" value={`${formatNumber(resultado.rendimentoPercentual, 1)}%`} tone="sage" />
+                <Resultado label="Perda" value={`${formatNumber(resultado.perdaKg, 2)} kg`} tone="brick" />
+                <Resultado label="Perda %" value={`${formatNumber(resultado.perdaPercentual, 1)}%`} tone="brick" />
+                <Resultado label="Qtde produzida" value={formatNumber(resultado.quantidadeProduzida, 0)} tone="gold" />
+                <Resultado label="CMV por kg" value={formatBRL(resultado.cmvPorKg)} />
+                <Resultado label="CMV unitário" value={formatBRL(resultado.cmvUnitario)} tone="gold" />
+              </div>
             </div>
           </div>
 
-          <div className="bg-surface border border-line rounded-lg p-5">
-            <h2 className="font-display text-lg mb-4">Sistema calcula</h2>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <Resultado label="Rendimento" value={`${formatNumber(resultado.rendimentoPercentual, 1)}%`} tone="sage" />
-              <Resultado label="Perda" value={`${formatNumber(resultado.perdaKg, 2)} kg`} tone="brick" />
-              <Resultado label="Perda %" value={`${formatNumber(resultado.perdaPercentual, 1)}%`} tone="brick" />
-              <Resultado label="Qtde produzida" value={formatNumber(resultado.quantidadeProduzida, 0)} tone="gold" />
-              <Resultado label="CMV por kg" value={formatBRL(resultado.cmvPorKg)} />
-              <Resultado label="CMV unitário" value={formatBRL(resultado.cmvUnitario)} tone="gold" />
-            </div>
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={salvar}
+              disabled={salvando}
+              className="flex items-center gap-1.5 text-sm bg-sage text-white px-4 py-2 rounded-md hover:opacity-90 disabled:opacity-60"
+            >
+              {salvando ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+              Salvar rendimento
+            </button>
+            {salvo && (
+              <span className="text-sm text-sage flex items-center gap-1">
+                <Check size={14} /> Salvo — já pode ser usada como ingrediente de outra receita
+              </span>
+            )}
           </div>
-        </div>
+        </>
       )}
     </div>
   );
