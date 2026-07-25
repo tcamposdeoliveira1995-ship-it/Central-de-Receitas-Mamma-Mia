@@ -7,7 +7,7 @@ import { calcularCMV, formatBRL } from "@/lib/calc";
 import StatCard from "@/components/StatCard";
 
 export default function DashboardPage() {
-  const { receitas, materiasPrimas, materiasPrimasById, producoes } = useStore();
+  const { receitas, materiasPrimas, materiasPrimasById, receitasById, producoes } = useStore();
 
   const cmvPorReceita = useMemo(
     () =>
@@ -17,10 +17,11 @@ export default function DashboardPage() {
           embalagemCusto: r.embalagem_custo || 0,
           quantidadeProducao: r.rendimento?.quantidade_produzida || 1,
           materiasPrimasById,
+          receitasById,
         });
         return { ...r, cmv };
       }),
-    [receitas, materiasPrimasById]
+    [receitas, materiasPrimasById, receitasById]
   );
 
   const cmvMedio = cmvPorReceita.length
