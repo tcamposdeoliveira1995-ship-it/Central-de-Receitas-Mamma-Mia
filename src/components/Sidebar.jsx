@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutGrid, Beef, BookOpen, Calculator, Percent, Factory } from "lucide-react";
-import { isDemoMode } from "@/lib/supabaseClient";
+import { isDemoMode } from "@/lib/sheetsClient";
 
 const links = [
   { href: "/", label: "Dashboard", icon: LayoutGrid },
@@ -56,7 +56,7 @@ export default function Sidebar() {
         ) : (
           <div className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-sage" />
-            Conectado ao Supabase
+            Conectado à planilha
           </div>
         )}
         <p className="mt-1">Mamma Mia Salgados</p>
