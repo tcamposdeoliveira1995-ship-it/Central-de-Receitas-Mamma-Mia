@@ -5,7 +5,7 @@ import { useStore } from "@/lib/store";
 import { calcularCMV, formatBRL } from "@/lib/calc";
 
 export default function CMVPage() {
-  const { receitas, materiasPrimasById } = useStore();
+  const { receitas, materiasPrimasById, receitasById } = useStore();
 
   const linhas = useMemo(
     () =>
@@ -17,11 +17,12 @@ export default function CMVPage() {
             embalagemCusto: r.embalagem_custo || 0,
             quantidadeProducao,
             materiasPrimasById,
+            receitasById,
           });
           return { ...r, cmv, quantidadeProducao };
         })
         .sort((a, b) => b.cmv.cmvUnitario - a.cmv.cmvUnitario),
-    [receitas, materiasPrimasById]
+    [receitas, materiasPrimasById, receitasById]
   );
 
   const maiorCusto = linhas[0];
