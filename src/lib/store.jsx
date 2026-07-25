@@ -8,11 +8,11 @@ import * as seed from "./seed";
 const StoreContext = createContext(null);
 
 export function StoreProvider({ children }) {
-  const [categorias, setCategorias] = useState(seed.categorias);
-  const [fornecedores, setFornecedores] = useState(seed.fornecedores);
-  const [materiasPrimas, setMateriasPrimas] = useState(seed.materiasPrimas);
-  const [receitas, setReceitas] = useState(seed.receitas);
-  const [producoes, setProducoes] = useState(seed.producoes);
+  const [categorias, setCategorias] = useState(isDemoMode ? seed.categorias : []);
+  const [fornecedores, setFornecedores] = useState(isDemoMode ? seed.fornecedores : []);
+  const [materiasPrimas, setMateriasPrimas] = useState(isDemoMode ? seed.materiasPrimas : []);
+  const [receitas, setReceitas] = useState(isDemoMode ? seed.receitas : []);
+  const [producoes, setProducoes] = useState(isDemoMode ? seed.producoes : []);
   const [loading, setLoading] = useState(!isDemoMode);
 
   // Carrega da planilha (via Apps Script) quando a URL estiver configurada.
