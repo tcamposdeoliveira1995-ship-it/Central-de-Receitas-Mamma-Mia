@@ -157,7 +157,7 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
         {itens.map((linha, i) => (
           <View style={styles.tabelaLinha} key={i}>
             <Text style={styles.celNome}>{linha.nome}</Text>
-            <Text style={styles.celApres}>{linha.apresentacaoLabel || "—"}</Text>
+            <Text style={styles.celApres}>{linha.apresentacao || "—"}</Text>
             <Text style={styles.celObs}>{linha.observacao || "—"}</Text>
             <Text style={styles.celQtde}>{formatNumber(linha.quantidade, 3)}</Text>
             <Text style={styles.celUnid}>{linha.unidade}</Text>
