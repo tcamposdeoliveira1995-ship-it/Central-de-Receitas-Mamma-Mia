@@ -14,21 +14,35 @@ function comIdGarantido_(itens) {
   return (itens || []).map((item) => (item.id ? item : { ...item, id: item.materia_prima_id }));
 }
 
+const PAPEIS_RECEITA = [
+  { valor: "", label: "— não classificado —" },
+  { valor: "massa", label: "Massa" },
+  { valor: "recheio", label: "Recheio" },
+  { valor: "produto_final", label: "Produto Final" },
+  { valor: "outro", label: "Outro" },
+];
+
+function labelPapel_(valor) {
+  return PAPEIS_RECEITA.find((p) => p.valor === valor)?.label || valor;
+}
+
 export default function ReceitasPage() {
   const { receitas, adicionarReceita } = useStore();
   const [selecionadaId, setSelecionadaId] = useState(receitas[0]?.id ?? null);
   const [criando, setCriando] = useState(false);
   const [nomeNova, setNomeNova] = useState("");
   const [empresaNova, setEmpresaNova] = useState("YUKA Alimentos");
+  const [papelNova, setPapelNova] = useState("");
 
   const selecionada = receitas.find((r) => r.id === selecionadaId);
 
   async function criarReceita() {
     if (!nomeNova.trim()) return;
     const codigo = `REC${String(receitas.length + 1).padStart(4, "0")}`;
-    const nova = await adicionarReceita({ codigo, nome: nomeNova, empresa: empresaNova, itens: [] });
+    const nova = await adicionarReceita({ codigo, nome: nomeNova, empresa: empresaNova, papel: papelNova, itens: [] });
     setSelecionadaId(nova.id);
     setNomeNova("");
+    setPapelNova("");
     setCriando(false);
   }
 
@@ -69,6 +83,18 @@ export default function ReceitasPage() {
               <option>TC Distribuidora</option>
             </select>
           </label>
+          <label className="text-xs text-muted">
+            Papel na produção
+            <select
+              value={papelNova}
+              onChange={(e) => setPapelNova(e.target.value)}
+              className="mt-1 block px-3 py-2 rounded-md border border-line text-sm"
+            >
+              {PAPEIS_RECEITA.map((p) => (
+                <option key={p.valor} value={p.valor}>{p.label}</option>
+              ))}
+            </select>
+          </label>
           <button onClick={criarReceita} className="px-4 py-2 bg-sage text-white text-sm rounded-md hover:opacity-90">
             Criar
           </button>
@@ -88,7 +114,10 @@ export default function ReceitasPage() {
                 >
                   <div>
                     <p className="font-medium">{r.nome}</p>
-                    <p className="text-xs text-muted font-mono-num">{r.codigo} · v{r.versao_atual || 1}</p>
+                    <p className="text-xs text-muted font-mono-num">
+                      {r.codigo} · v{r.versao_atual || 1}
+                      {r.papel && <span className="ml-1.5 normal-case">· {labelPapel_(r.papel)}</span>}
+                    </p>
                   </div>
                   <ChevronRight size={14} className="text-muted" />
                 </button>
@@ -119,6 +148,7 @@ function ReceitaDetalhe({ receita }) {
     receitas,
     receitasById,
     atualizarItensReceita,
+    atualizarReceitaPapel,
     adicionarMateriaPrima,
     enviarFichaPdf,
   } = useStore();
@@ -171,6 +201,7 @@ function ReceitaDetalhe({ receita }) {
         tipo: "materia_prima",
         apresentacao_id: apresentacaoPadrao?.id || "",
         observacao: "",
+        usa_custo_cozido: false,
       },
     ];
     setItens(novosItens);
@@ -193,6 +224,12 @@ function ReceitaDetalhe({ receita }) {
 
   function alterarObservacao(itemId, observacao) {
     const novosItens = itens.map((i) => (i.id === itemId ? { ...i, observacao } : i));
+    setItens(novosItens);
+    atualizarItensReceita(receita.id, novosItens);
+  }
+
+  function alterarUsaCustoCozido(itemId, valor) {
+    const novosItens = itens.map((i) => (i.id === itemId ? { ...i, usa_custo_cozido: valor } : i));
     setItens(novosItens);
     atualizarItensReceita(receita.id, novosItens);
   }
@@ -343,6 +380,15 @@ function ReceitaDetalhe({ receita }) {
           <p className="text-xs font-mono-num text-muted">{receita.codigo}</p>
           <h2 className="font-display text-2xl mt-0.5">{receita.nome}</h2>
           <p className="text-sm text-muted mt-0.5">{receita.empresa}</p>
+          <select
+            value={receita.papel || ""}
+            onChange={(e) => atualizarReceitaPapel(receita.id, e.target.value)}
+            className="mt-2 text-xs px-2 py-1 border border-line rounded-md bg-surface"
+          >
+            {PAPEIS_RECEITA.map((p) => (
+              <option key={p.valor} value={p.valor}>{p.label}</option>
+            ))}
+          </select>
         </div>
         <span className="text-xs px-2.5 py-1 rounded-full bg-sage-soft text-sage font-medium capitalize">
           {(receita.status || "ativa").replace("_", " ")}
@@ -544,6 +590,12 @@ function ReceitaDetalhe({ receita }) {
               : converterQuantidade(item.quantidade, item.unidade, unidadePreco);
             const valorTotal = quantidadeParaCusto * valorUnitario;
             const apresentacoesDaMp = mp?.apresentacoes || [];
+            const rendimentoComCoccao =
+              !ehSubReceita && item.apresentacao_id
+                ? (mp?.rendimentos || []).find(
+                    (r) => r.apresentacao_id === item.apresentacao_id && r.tipo_coccao !== "N/A"
+                  )
+                : null;
             return (
               <tr key={item.id} className="border-b border-line last:border-0">
                 <td className="py-2">
@@ -568,7 +620,19 @@ function ReceitaDetalhe({ receita }) {
                     <span className="text-xs text-muted">—</span>
                   )}
                   {efetivo?.viaRendimento && (
-                    <span className="block text-[10px] text-sage mt-0.5">custo via rendimento</span>
+                    <span className="block text-[10px] text-sage mt-0.5">
+                      custo via rendimento ({efetivo.base === "cozido" ? "cozido" : "líquido"})
+                    </span>
+                  )}
+                  {rendimentoComCoccao && (
+                    <label className="flex items-center gap-1 text-[10px] text-muted mt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={!!item.usa_custo_cozido}
+                        onChange={(e) => alterarUsaCustoCozido(item.id, e.target.checked)}
+                      />
+                      já {rendimentoComCoccao.tipo_coccao?.toLowerCase()}
+                    </label>
                   )}
                 </td>
                 <td className="py-2">
