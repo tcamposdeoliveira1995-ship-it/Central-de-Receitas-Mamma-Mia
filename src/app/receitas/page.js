@@ -156,7 +156,7 @@ function ReceitaDetalhe({ receita }) {
         materia_prima_id: mp.id,
         nome: mp.nome,
         quantidade: 1,
-        unidade: mp.unidade,
+        unidade: apresentacaoPadrao?.unidade || mp.unidade,
         tipo: "materia_prima",
         apresentacao_id: apresentacaoPadrao?.id || "",
       },
@@ -167,8 +167,12 @@ function ReceitaDetalhe({ receita }) {
   }
 
   function alterarApresentacao(materiaPrimaId, apresentacaoId) {
+    const mp = materiasPrimasById[materiaPrimaId];
+    const apresentacao = (mp?.apresentacoes || []).find((a) => a.id === apresentacaoId);
     const novosItens = itens.map((i) =>
-      i.materia_prima_id === materiaPrimaId ? { ...i, apresentacao_id: apresentacaoId } : i
+      i.materia_prima_id === materiaPrimaId
+        ? { ...i, apresentacao_id: apresentacaoId, unidade: apresentacao?.unidade || mp?.unidade || i.unidade }
+        : i
     );
     setItens(novosItens);
     atualizarItensReceita(receita.id, novosItens);
