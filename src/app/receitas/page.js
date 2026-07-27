@@ -149,6 +149,7 @@ function ReceitaDetalhe({ receita }) {
     receitasById,
     atualizarItensReceita,
     atualizarReceitaPapel,
+    atualizarReceitaCampos,
     adicionarMateriaPrima,
     enviarFichaPdf,
   } = useStore();
@@ -715,6 +716,47 @@ function ReceitaDetalhe({ receita }) {
         <span className="font-display text-xl font-mono-num text-sage">{formatBRL(cmv.cmvUnitario)}</span>
         <span className="text-xs text-muted">(produção prevista: {formatNumber(quantidadeProducao, 0)} un)</span>
       </div>
+
+      <ModoPreparoSecao receita={receita} onSalvar={atualizarReceitaCampos} />
+    </div>
+  );
+}
+
+function ModoPreparoSecao({ receita, onSalvar }) {
+  const [texto, setTexto] = useState(receita.modo_preparo || "");
+  const [salvando, setSalvando] = useState(false);
+
+  // Sincroniza quando troca de receita selecionada (mesmo princípio do
+  // useEffect dos itens — nunca usar useMemo pra isso).
+  useEffect(() => {
+    setTexto(receita.modo_preparo || "");
+  }, [receita.id]);
+
+  async function salvar() {
+    if (texto === (receita.modo_preparo || "")) return; // nada mudou, não salva à toa
+    setSalvando(true);
+    try {
+      await onSalvar(receita.id, { modo_preparo: texto });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="mt-5 pt-4 border-t border-line">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs uppercase tracking-wide text-muted">Modo de preparo</p>
+        {salvando && <span className="text-xs text-muted">salvando…</span>}
+      </div>
+      <textarea
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
+        onBlur={salvar}
+        rows={6}
+        placeholder={"Descreva o passo a passo do preparo, ex:\n1. Misture os ingredientes secos...\n2. Adicione a margarina gelada...\n3. Descanse por 30 minutos..."}
+        className="w-full px-3 py-2 border border-line rounded-md text-sm leading-relaxed resize-y"
+      />
+      <p className="text-xs text-muted mt-1">Salva automaticamente ao clicar fora do campo.</p>
     </div>
   );
 }
