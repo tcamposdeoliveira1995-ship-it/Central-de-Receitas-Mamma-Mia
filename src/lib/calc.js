@@ -70,6 +70,53 @@ export function custoIngredientes(itens, materiasPrimasById, receitasById = {}, 
   }, 0);
 }
 
+// Converte a quantidade de um item pra kg, pra poder somar o peso total de
+// ingredientes de uma receita. Cobre massa (kg/g) e, como aproximação comum
+// em receitas, trata volume (L/ml) como equivalente a peso (1L ≈ 1kg — vale
+// bem pra água, é aproximado pra outros líquidos). Itens em "unidade" (un)
+// só convertem se a apresentação escolhida tiver um peso de referência
+// cadastrado; sem isso, entram como "não convertido" e ficam de fora da soma.
+export function converterParaKg(quantidade, unidade, apresentacao) {
+  const u = (unidade || "").toLowerCase();
+  if (u === "kg" || u === "l") return quantidade;
+  if (u === "g" || u === "ml") return quantidade / 1000;
+  if (u === "un" && apresentacao?.peso_referencia) {
+    const pesoUnidadeKg =
+      (apresentacao.unidade || "").toLowerCase() === "kg"
+        ? apresentacao.peso_referencia
+        : apresentacao.peso_referencia / 1000;
+    return quantidade * pesoUnidadeKg;
+  }
+  return null; // sinaliza que não deu pra converter esse item
+}
+
+// Soma o peso (kg) de todos os ingredientes de uma receita — usado pra
+// pré-preencher "Peso dos ingredientes" no módulo de Rendimento, evitando
+// soma manual (e os erros de digitação que vêm junto).
+export function pesoTotalIngredientes(itens, materiasPrimasById, receitasById = {}) {
+  let total = 0;
+  let itensNaoConvertidos = [];
+
+  for (const item of itens || []) {
+    if (item.tipo === "receita") {
+      // Sub-receita: a quantidade já é lançada em kg (peso final dela).
+      total += item.quantidade || 0;
+      continue;
+    }
+    const mp = materiasPrimasById[item.materia_prima_id];
+    if (!mp) continue;
+    const apresentacao = (mp.apresentacoes || []).find((a) => a.id === item.apresentacao_id);
+    const emKg = converterParaKg(item.quantidade, item.unidade, apresentacao);
+    if (emKg === null) {
+      itensNaoConvertidos.push(item.nome || mp.nome);
+      continue;
+    }
+    total += emKg;
+  }
+
+  return { total: Number(total.toFixed(4)), itensNaoConvertidos };
+}
+
 export function calcularCMV({ itens, embalagemCusto = 0, quantidadeProducao = 1, materiasPrimasById, receitasById = {}, visitados }) {
   const totalIngredientes = custoIngredientes(itens, materiasPrimasById, receitasById, visitados || new Set());
   const totalGeral = totalIngredientes + embalagemCusto;
