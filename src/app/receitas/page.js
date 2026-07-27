@@ -1,30 +1,13 @@
 "use client";
 
-import { useMemo, useRef, useState, useEffect } from "react";
-import { Plus, Search, X, ChevronRight, Upload, FileText, Check, Loader2, Layers } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Plus, Search, X, ChevronRight, Upload, FileText, Check, Loader2, Layers, Download } from "lucide-react";
+import { pdf } from "@react-pdf/renderer";
 import { useStore } from "@/lib/store";
-import { calcularCMV, custoPorKgReceita, custoEfetivoIngrediente, converterQuantidade, formatBRL, formatNumber } from "@/lib/calc";
+import { calcularCMV, custoPorKgReceita, converterQuantidade, formatBRL, formatNumber } from "@/lib/calc";
 import { extrairTextoPDF } from "@/lib/pdfText";
 import { parseTextoReceita, encontrarMateriaPrimaPorNome } from "@/lib/parseReceita";
-
-// Itens salvos antes da coluna `id` existir no backend não têm identificador
-// próprio — usa o materia_prima_id como fallback pra não quebrar a tela
-// (só vira ambíguo se já havia duplicata sem id, caso raríssimo).
-function comIdGarantido_(itens) {
-  return (itens || []).map((item) => (item.id ? item : { ...item, id: item.materia_prima_id }));
-}
-
-const PAPEIS_RECEITA = [
-  { valor: "", label: "— não classificado —" },
-  { valor: "massa", label: "Massa" },
-  { valor: "recheio", label: "Recheio" },
-  { valor: "produto_final", label: "Produto Final" },
-  { valor: "outro", label: "Outro" },
-];
-
-function labelPapel_(valor) {
-  return PAPEIS_RECEITA.find((p) => p.valor === valor)?.label || valor;
-}
+import { FichaReceitaPDF } from "@/lib/pdfReceita";
 
 export default function ReceitasPage() {
   const { receitas, adicionarReceita } = useStore();
@@ -32,17 +15,15 @@ export default function ReceitasPage() {
   const [criando, setCriando] = useState(false);
   const [nomeNova, setNomeNova] = useState("");
   const [empresaNova, setEmpresaNova] = useState("YUKA Alimentos");
-  const [papelNova, setPapelNova] = useState("");
 
   const selecionada = receitas.find((r) => r.id === selecionadaId);
 
   async function criarReceita() {
     if (!nomeNova.trim()) return;
     const codigo = `REC${String(receitas.length + 1).padStart(4, "0")}`;
-    const nova = await adicionarReceita({ codigo, nome: nomeNova, empresa: empresaNova, papel: papelNova, itens: [] });
+    const nova = await adicionarReceita({ codigo, nome: nomeNova, empresa: empresaNova, itens: [] });
     setSelecionadaId(nova.id);
     setNomeNova("");
-    setPapelNova("");
     setCriando(false);
   }
 
@@ -83,18 +64,6 @@ export default function ReceitasPage() {
               <option>TC Distribuidora</option>
             </select>
           </label>
-          <label className="text-xs text-muted">
-            Papel na produção
-            <select
-              value={papelNova}
-              onChange={(e) => setPapelNova(e.target.value)}
-              className="mt-1 block px-3 py-2 rounded-md border border-line text-sm"
-            >
-              {PAPEIS_RECEITA.map((p) => (
-                <option key={p.valor} value={p.valor}>{p.label}</option>
-              ))}
-            </select>
-          </label>
           <button onClick={criarReceita} className="px-4 py-2 bg-sage text-white text-sm rounded-md hover:opacity-90">
             Criar
           </button>
@@ -114,10 +83,7 @@ export default function ReceitasPage() {
                 >
                   <div>
                     <p className="font-medium">{r.nome}</p>
-                    <p className="text-xs text-muted font-mono-num">
-                      {r.codigo} · v{r.versao_atual || 1}
-                      {r.papel && <span className="ml-1.5 normal-case">· {labelPapel_(r.papel)}</span>}
-                    </p>
+                    <p className="text-xs text-muted font-mono-num">{r.codigo} · v{r.versao_atual || 1}</p>
                   </div>
                   <ChevronRight size={14} className="text-muted" />
                 </button>
@@ -148,17 +114,19 @@ function ReceitaDetalhe({ receita }) {
     receitas,
     receitasById,
     atualizarItensReceita,
-    atualizarReceitaPapel,
-    atualizarReceitaCampos,
     adicionarMateriaPrima,
     enviarFichaPdf,
+    atualizarDetalhesReceita,
   } = useStore();
-  const [itens, setItens] = useState(() => comIdGarantido_(receita.itens));
+  const [itens, setItens] = useState(receita.itens || []);
   const [busca, setBusca] = useState("");
   const [lendoPdf, setLendoPdf] = useState(false);
   const [erroPdf, setErroPdf] = useState("");
   const [pdfPendente, setPdfPendente] = useState(null); // { arquivo, itensDetectados }
   const [salvandoPdf, setSalvandoPdf] = useState(false);
+  const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [papel, setPapel] = useState(receita.papel || "");
+  const [modoPreparo, setModoPreparo] = useState(receita.modo_preparo || "");
   const enviandoRef = useRef(false); // trava síncrona contra duplo clique (o state salvandoPdf é assíncrono e não pega cliques rápidos)
 
   // Resultados de busca combinam Matérias-Primas e outras Receitas (sub-receitas,
@@ -176,82 +144,30 @@ function ReceitaDetalhe({ receita }) {
   const temResultados = resultadosBusca.mps.length > 0 || resultadosBusca.subReceitas.length > 0;
 
   // Sincroniza quando troca de receita selecionada
-  useEffect(() => {
-    setItens(comIdGarantido_(receita.itens));
+  useMemo(() => {
+    setItens(receita.itens || []);
     setPdfPendente(null);
     setErroPdf("");
+    setPapel(receita.papel || "");
+    setModoPreparo(receita.modo_preparo || "");
   }, [receita.id]);
 
-  function gerarIdItem_() {
-    return `item-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-  }
-
   function adicionarIngrediente(mp) {
-    const apresentacaoPadrao = (mp.apresentacoes || []).find((a) => a.e_padrao);
-    const apresentacaoIdNova = apresentacaoPadrao?.id || "";
-
-    // Não bloqueia duplicata (farinha na massa + farinha pra polvilhar é um
-    // caso válido) — mas avisa se for uma duplicata EXATA (mesma apresentação,
-    // sem observação diferenciando), que costuma ser clique repetido sem querer.
-    const jaExisteIdentico = itens.some(
-      (i) => i.materia_prima_id === mp.id && (i.apresentacao_id || "") === apresentacaoIdNova && !i.observacao
-    );
-    if (jaExisteIdentico) {
-      const confirmar = confirm(
-        `"${mp.nome}" já está nessa receita com a mesma apresentação e sem observação — parece duplicata. Adicionar mesmo assim?`
-      );
-      if (!confirmar) {
-        setBusca("");
-        return;
-      }
+    if (itens.some((i) => i.materia_prima_id === mp.id)) {
+      setBusca("");
+      return;
     }
-
     const novosItens = [
       ...itens,
-      {
-        id: gerarIdItem_(),
-        materia_prima_id: mp.id,
-        nome: mp.nome,
-        quantidade: 1,
-        unidade: apresentacaoPadrao?.unidade || mp.unidade,
-        tipo: "materia_prima",
-        apresentacao_id: apresentacaoIdNova,
-        observacao: "",
-        usa_custo_cozido: false,
-      },
+      { materia_prima_id: mp.id, nome: mp.nome, quantidade: 1, unidade: mp.unidade, tipo: "materia_prima" },
     ];
     setItens(novosItens);
     atualizarItensReceita(receita.id, novosItens);
     setBusca("");
   }
 
-  function alterarApresentacao(itemId, apresentacaoId) {
-    const item = itens.find((i) => i.id === itemId);
-    const mp = item ? materiasPrimasById[item.materia_prima_id] : null;
-    const apresentacao = (mp?.apresentacoes || []).find((a) => a.id === apresentacaoId);
-    const novosItens = itens.map((i) =>
-      i.id === itemId
-        ? { ...i, apresentacao_id: apresentacaoId, unidade: apresentacao?.unidade || mp?.unidade || i.unidade }
-        : i
-    );
-    setItens(novosItens);
-    atualizarItensReceita(receita.id, novosItens);
-  }
-
-  function alterarObservacao(itemId, observacao) {
-    const novosItens = itens.map((i) => (i.id === itemId ? { ...i, observacao } : i));
-    setItens(novosItens);
-    atualizarItensReceita(receita.id, novosItens);
-  }
-
-  function alterarUsaCustoCozido(itemId, valor) {
-    const novosItens = itens.map((i) => (i.id === itemId ? { ...i, usa_custo_cozido: valor } : i));
-    setItens(novosItens);
-    atualizarItensReceita(receita.id, novosItens);
-  }
-
   function adicionarSubReceita(subReceita) {
-    if (itens.some((i) => i.materia_prima_id === subReceita.id && i.tipo === "receita")) {
+    if (itens.some((i) => i.materia_prima_id === subReceita.id)) {
       setBusca("");
       return;
     }
@@ -262,21 +178,21 @@ function ReceitaDetalhe({ receita }) {
     }
     const novosItens = [
       ...itens,
-      { id: gerarIdItem_(), materia_prima_id: subReceita.id, nome: subReceita.nome, quantidade: 1, unidade: "kg", tipo: "receita" },
+      { materia_prima_id: subReceita.id, nome: subReceita.nome, quantidade: 1, unidade: "kg", tipo: "receita" },
     ];
     setItens(novosItens);
     atualizarItensReceita(receita.id, novosItens);
     setBusca("");
   }
 
-  function alterarQuantidade(itemId, quantidade) {
-    const novosItens = itens.map((i) => (i.id === itemId ? { ...i, quantidade } : i));
+  function alterarQuantidade(materiaPrimaId, quantidade) {
+    const novosItens = itens.map((i) => (i.materia_prima_id === materiaPrimaId ? { ...i, quantidade } : i));
     setItens(novosItens);
     atualizarItensReceita(receita.id, novosItens);
   }
 
-  function removerIngrediente(itemId) {
-    const novosItens = itens.filter((i) => i.id !== itemId);
+  function removerIngrediente(materiaPrimaId) {
+    const novosItens = itens.filter((i) => i.materia_prima_id !== materiaPrimaId);
     setItens(novosItens);
     atualizarItensReceita(receita.id, novosItens);
   }
@@ -285,6 +201,73 @@ function ReceitaDetalhe({ receita }) {
     if (!confirm("Remover todos os ingredientes desta receita? Essa ação não pode ser desfeita.")) return;
     setItens([]);
     atualizarItensReceita(receita.id, []);
+  }
+
+  function alterarPapel(novoPapel) {
+    setPapel(novoPapel);
+    atualizarDetalhesReceita(receita.id, { papel: novoPapel, modo_preparo: modoPreparo });
+  }
+
+  function salvarModoPreparo() {
+    if (modoPreparo === (receita.modo_preparo || "")) return; // nada mudou, não salva à toa
+    atualizarDetalhesReceita(receita.id, { papel, modo_preparo: modoPreparo });
+  }
+
+  function alterarDetalheItemLocal(materiaPrimaId, campo, valor) {
+    setItens((prev) => prev.map((i) => (i.materia_prima_id === materiaPrimaId ? { ...i, [campo]: valor } : i)));
+  }
+
+  function salvarItensAtual() {
+    atualizarItensReceita(receita.id, itens);
+  }
+
+  async function baixarPdf() {
+    setGerandoPdf(true);
+    try {
+      const itensParaPdf = itens.map((item) => {
+        const ehSubReceita = item.tipo === "receita";
+        const subReceita = ehSubReceita ? receitasById[item.materia_prima_id] : null;
+        const mp = !ehSubReceita ? materiasPrimasById[item.materia_prima_id] : null;
+        const valorUnitario = ehSubReceita
+          ? custoPorKgReceita(subReceita, receitasById, materiasPrimasById)
+          : mp?.preco_atual || 0;
+        const unidadePreco = ehSubReceita ? "kg" : mp?.unidade || item.unidade;
+        const quantidadeParaCusto = ehSubReceita
+          ? item.quantidade
+          : converterQuantidade(item.quantidade, item.unidade, mp?.unidade);
+        return {
+          nome: item.nome || mp?.nome,
+          apresentacao: item.apresentacao,
+          observacao: item.observacao,
+          quantidade: item.quantidade,
+          unidade: item.unidade,
+          valorUnitario,
+          unidadePreco,
+          valorTotal: quantidadeParaCusto * valorUnitario,
+        };
+      });
+
+      const blob = await pdf(
+        <FichaReceitaPDF
+          receita={{ ...receita, papel, modo_preparo: modoPreparo }}
+          itens={itensParaPdf}
+          cmv={cmv}
+          quantidadeProducao={quantidadeProducao}
+        />
+      ).toBlob();
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${receita.codigo || "ficha"}-${receita.nome}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert("Não consegui gerar o PDF. Tenta de novo em alguns segundos.");
+    } finally {
+      setGerandoPdf(false);
+    }
   }
 
   async function handleArquivoPdf(e) {
@@ -355,14 +338,12 @@ function ReceitaDetalhe({ receita }) {
         });
       }
 
-      // 2) mescla com os ingredientes que já existiam na receita — se já
-      //    existir uma linha dessa matéria-prima, atualiza ela (mantendo o
-      //    id); senão, adiciona como linha nova.
+      // 2) mescla com os ingredientes que já existiam na receita
       const mesclados = [...itens];
       for (const novo of itensParaAdicionar) {
         const idx = mesclados.findIndex((i) => i.materia_prima_id === novo.materia_prima_id);
-        if (idx >= 0) mesclados[idx] = { ...mesclados[idx], ...novo };
-        else mesclados.push({ ...novo, id: gerarIdItem_() });
+        if (idx >= 0) mesclados[idx] = novo;
+        else mesclados.push(novo);
       }
       setItens(mesclados);
       await atualizarItensReceita(receita.id, mesclados);
@@ -391,24 +372,38 @@ function ReceitaDetalhe({ receita }) {
 
   return (
     <div className="bg-surface border border-line rounded-lg p-5">
-      <div className="flex items-baseline justify-between">
+      <div className="flex items-baseline justify-between flex-wrap gap-3">
         <div>
           <p className="text-xs font-mono-num text-muted">{receita.codigo}</p>
-          <h2 className="font-display text-2xl mt-0.5">{receita.nome}</h2>
+          <div className="flex items-center gap-2 mt-0.5">
+            <h2 className="font-display text-2xl">{receita.nome}</h2>
+            <span className="text-xs px-2.5 py-1 rounded-full bg-sage-soft text-sage font-medium capitalize">
+              {(receita.status || "ativa").replace("_", " ")}
+            </span>
+          </div>
           <p className="text-sm text-muted mt-0.5">{receita.empresa}</p>
-          <select
-            value={receita.papel || ""}
-            onChange={(e) => atualizarReceitaPapel(receita.id, e.target.value)}
-            className="mt-2 text-xs px-2 py-1 border border-line rounded-md bg-surface"
-          >
-            {PAPEIS_RECEITA.map((p) => (
-              <option key={p.valor} value={p.valor}>{p.label}</option>
-            ))}
-          </select>
         </div>
-        <span className="text-xs px-2.5 py-1 rounded-full bg-sage-soft text-sage font-medium capitalize">
-          {(receita.status || "ativa").replace("_", " ")}
-        </span>
+        <div className="flex items-center gap-2">
+          <select
+            value={papel}
+            onChange={(e) => alterarPapel(e.target.value)}
+            className="text-xs px-2.5 py-1.5 rounded-md border border-line bg-surface"
+          >
+            <option value="">Papel da receita...</option>
+            <option value="massa">Massa</option>
+            <option value="recheio">Recheio</option>
+            <option value="produto_final">Produto Final</option>
+            <option value="outro">Outro</option>
+          </select>
+          <button
+            onClick={baixarPdf}
+            disabled={gerandoPdf}
+            className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line hover:bg-gold-soft/30 disabled:opacity-60"
+          >
+            {gerandoPdf ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+            Baixar PDF
+          </button>
+        </div>
       </div>
 
       {/* Upload de ficha técnica em PDF */}
@@ -582,7 +577,7 @@ function ReceitaDetalhe({ receita }) {
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-muted border-b border-line">
             <th className="py-2 font-medium">Ingrediente</th>
-            <th className="py-2 font-medium">Apresentação</th>
+            <th className="py-2 font-medium">Apresent.</th>
             <th className="py-2 font-medium">Obs.</th>
             <th className="py-2 font-medium">Qtde</th>
             <th className="py-2 font-medium">Unid.</th>
@@ -596,24 +591,16 @@ function ReceitaDetalhe({ receita }) {
             const ehSubReceita = item.tipo === "receita";
             const subReceita = ehSubReceita ? receitasById[item.materia_prima_id] : null;
             const mp = !ehSubReceita ? materiasPrimasById[item.materia_prima_id] : null;
-            const efetivo = !ehSubReceita ? custoEfetivoIngrediente(item, mp) : null;
             const valorUnitario = ehSubReceita
               ? custoPorKgReceita(subReceita, receitasById, materiasPrimasById)
-              : efetivo.valorUnitario;
-            const unidadePreco = ehSubReceita ? "kg" : efetivo.unidadePreco;
+              : mp?.preco_atual || 0;
+            const unidadePreco = ehSubReceita ? "kg" : mp?.unidade || item.unidade;
             const quantidadeParaCusto = ehSubReceita
               ? item.quantidade
-              : converterQuantidade(item.quantidade, item.unidade, unidadePreco);
+              : converterQuantidade(item.quantidade, item.unidade, mp?.unidade);
             const valorTotal = quantidadeParaCusto * valorUnitario;
-            const apresentacoesDaMp = mp?.apresentacoes || [];
-            const rendimentoComCoccao =
-              !ehSubReceita && item.apresentacao_id
-                ? (mp?.rendimentos || []).find(
-                    (r) => r.apresentacao_id === item.apresentacao_id && r.tipo_coccao !== "N/A"
-                  )
-                : null;
             return (
-              <tr key={item.id} className="border-b border-line last:border-0">
+              <tr key={item.materia_prima_id} className="border-b border-line last:border-0">
                 <td className="py-2">
                   <span className="flex items-center gap-1.5">
                     {ehSubReceita && <Layers size={12} className="text-sage shrink-0" />}
@@ -621,54 +608,29 @@ function ReceitaDetalhe({ receita }) {
                   </span>
                 </td>
                 <td className="py-2">
-                  {!ehSubReceita && apresentacoesDaMp.length > 0 ? (
-                    <select
-                      value={item.apresentacao_id || ""}
-                      onChange={(e) => alterarApresentacao(item.id, e.target.value)}
-                      className="px-1.5 py-1 border border-line rounded-md text-xs bg-surface"
-                    >
-                      <option value="">— padrão da matéria-prima —</option>
-                      {apresentacoesDaMp.map((a) => (
-                        <option key={a.id} value={a.id}>{a.forma}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="text-xs text-muted">—</span>
-                  )}
-                  {efetivo?.viaRendimento && (
-                    <span className="block text-[10px] text-sage mt-0.5">
-                      custo via rendimento ({efetivo.base === "cozido" ? "cozido" : "líquido"})
-                    </span>
-                  )}
-                  {rendimentoComCoccao && (
-                    <label className="flex items-center gap-1 text-[10px] text-muted mt-0.5">
-                      <input
-                        type="checkbox"
-                        checked={!!item.usa_custo_cozido}
-                        onChange={(e) => alterarUsaCustoCozido(item.id, e.target.checked)}
-                      />
-                      já {rendimentoComCoccao.tipo_coccao?.toLowerCase()}
-                    </label>
-                  )}
+                  <input
+                    value={item.apresentacao || ""}
+                    onChange={(e) => alterarDetalheItemLocal(item.materia_prima_id, "apresentacao", e.target.value)}
+                    onBlur={salvarItensAtual}
+                    placeholder="—"
+                    className="w-20 px-2 py-1 border border-line rounded-md text-xs"
+                  />
                 </td>
                 <td className="py-2">
-                  {!ehSubReceita ? (
-                    <input
-                      value={item.observacao || ""}
-                      onChange={(e) => alterarObservacao(item.id, e.target.value)}
-                      placeholder="ex: Polvilhar"
-                      className="w-24 px-2 py-1 border border-line rounded-md text-xs"
-                    />
-                  ) : (
-                    <span className="text-xs text-muted">—</span>
-                  )}
+                  <input
+                    value={item.observacao || ""}
+                    onChange={(e) => alterarDetalheItemLocal(item.materia_prima_id, "observacao", e.target.value)}
+                    onBlur={salvarItensAtual}
+                    placeholder="—"
+                    className="w-20 px-2 py-1 border border-line rounded-md text-xs"
+                  />
                 </td>
                 <td className="py-2">
                   <input
                     type="number"
                     step="0.01"
                     value={item.quantidade}
-                    onChange={(e) => alterarQuantidade(item.id, parseFloat(e.target.value) || 0)}
+                    onChange={(e) => alterarQuantidade(item.materia_prima_id, parseFloat(e.target.value) || 0)}
                     className="w-20 px-2 py-1 border border-line rounded-md font-mono-num"
                   />
                 </td>
@@ -679,7 +641,7 @@ function ReceitaDetalhe({ receita }) {
                 </td>
                 <td className="py-2 text-right font-mono-num font-medium">{formatBRL(valorTotal)}</td>
                 <td className="py-2 text-right">
-                  <button onClick={() => removerIngrediente(item.id)} className="text-muted hover:text-brick">
+                  <button onClick={() => removerIngrediente(item.materia_prima_id)} className="text-muted hover:text-brick">
                     <X size={14} />
                   </button>
 
@@ -696,6 +658,18 @@ function ReceitaDetalhe({ receita }) {
           )}
         </tbody>
       </table>
+
+      <div className="mt-5">
+        <label className="text-xs uppercase tracking-wide text-muted block mb-1.5">Modo de preparo</label>
+        <textarea
+          value={modoPreparo}
+          onChange={(e) => setModoPreparo(e.target.value)}
+          onBlur={salvarModoPreparo}
+          rows={4}
+          placeholder="Descreva o passo a passo do preparo..."
+          className="w-full px-3 py-2 rounded-md border border-line text-sm resize-y"
+        />
+      </div>
 
       <div className="mt-5 pt-4 border-t border-line grid grid-cols-3 gap-4 text-sm">
         <div>
@@ -716,47 +690,6 @@ function ReceitaDetalhe({ receita }) {
         <span className="font-display text-xl font-mono-num text-sage">{formatBRL(cmv.cmvUnitario)}</span>
         <span className="text-xs text-muted">(produção prevista: {formatNumber(quantidadeProducao, 0)} un)</span>
       </div>
-
-      <ModoPreparoSecao receita={receita} onSalvar={atualizarReceitaCampos} />
-    </div>
-  );
-}
-
-function ModoPreparoSecao({ receita, onSalvar }) {
-  const [texto, setTexto] = useState(receita.modo_preparo || "");
-  const [salvando, setSalvando] = useState(false);
-
-  // Sincroniza quando troca de receita selecionada (mesmo princípio do
-  // useEffect dos itens — nunca usar useMemo pra isso).
-  useEffect(() => {
-    setTexto(receita.modo_preparo || "");
-  }, [receita.id]);
-
-  async function salvar() {
-    if (texto === (receita.modo_preparo || "")) return; // nada mudou, não salva à toa
-    setSalvando(true);
-    try {
-      await onSalvar(receita.id, { modo_preparo: texto });
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <div className="mt-5 pt-4 border-t border-line">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs uppercase tracking-wide text-muted">Modo de preparo</p>
-        {salvando && <span className="text-xs text-muted">salvando…</span>}
-      </div>
-      <textarea
-        value={texto}
-        onChange={(e) => setTexto(e.target.value)}
-        onBlur={salvar}
-        rows={6}
-        placeholder={"Descreva o passo a passo do preparo, ex:\n1. Misture os ingredientes secos...\n2. Adicione a margarina gelada...\n3. Descanse por 30 minutos..."}
-        className="w-full px-3 py-2 border border-line rounded-md text-sm leading-relaxed resize-y"
-      />
-      <p className="text-xs text-muted mt-1">Salva automaticamente ao clicar fora do campo.</p>
     </div>
   );
 }
