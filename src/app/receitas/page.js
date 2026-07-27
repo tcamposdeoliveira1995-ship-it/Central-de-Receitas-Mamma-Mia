@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Plus, Search, X, ChevronRight, Upload, FileText, Check, Loader2, Layers } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { calcularCMV, custoPorKgReceita, converterQuantidade, formatBRL, formatNumber } from "@/lib/calc";
+import { calcularCMV, custoPorKgReceita, custoEfetivoIngrediente, converterQuantidade, formatBRL, formatNumber } from "@/lib/calc";
 import { extrairTextoPDF } from "@/lib/pdfText";
 import { parseTextoReceita, encontrarMateriaPrimaPorNome } from "@/lib/parseReceita";
 
@@ -149,13 +149,29 @@ function ReceitaDetalhe({ receita }) {
       setBusca("");
       return;
     }
+    const apresentacaoPadrao = (mp.apresentacoes || []).find((a) => a.e_padrao);
     const novosItens = [
       ...itens,
-      { materia_prima_id: mp.id, nome: mp.nome, quantidade: 1, unidade: mp.unidade, tipo: "materia_prima" },
+      {
+        materia_prima_id: mp.id,
+        nome: mp.nome,
+        quantidade: 1,
+        unidade: mp.unidade,
+        tipo: "materia_prima",
+        apresentacao_id: apresentacaoPadrao?.id || "",
+      },
     ];
     setItens(novosItens);
     atualizarItensReceita(receita.id, novosItens);
     setBusca("");
+  }
+
+  function alterarApresentacao(materiaPrimaId, apresentacaoId) {
+    const novosItens = itens.map((i) =>
+      i.materia_prima_id === materiaPrimaId ? { ...i, apresentacao_id: apresentacaoId } : i
+    );
+    setItens(novosItens);
+    atualizarItensReceita(receita.id, novosItens);
   }
 
   function adicionarSubReceita(subReceita) {
@@ -479,6 +495,7 @@ function ReceitaDetalhe({ receita }) {
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-muted border-b border-line">
             <th className="py-2 font-medium">Ingrediente</th>
+            <th className="py-2 font-medium">Apresentação</th>
             <th className="py-2 font-medium">Qtde</th>
             <th className="py-2 font-medium">Unid.</th>
             <th className="py-2 font-medium text-right">Valor unit.</th>
@@ -491,14 +508,16 @@ function ReceitaDetalhe({ receita }) {
             const ehSubReceita = item.tipo === "receita";
             const subReceita = ehSubReceita ? receitasById[item.materia_prima_id] : null;
             const mp = !ehSubReceita ? materiasPrimasById[item.materia_prima_id] : null;
+            const efetivo = !ehSubReceita ? custoEfetivoIngrediente(item, mp) : null;
             const valorUnitario = ehSubReceita
               ? custoPorKgReceita(subReceita, receitasById, materiasPrimasById)
-              : mp?.preco_atual || 0;
-            const unidadePreco = ehSubReceita ? "kg" : mp?.unidade || item.unidade;
+              : efetivo.valorUnitario;
+            const unidadePreco = ehSubReceita ? "kg" : efetivo.unidadePreco;
             const quantidadeParaCusto = ehSubReceita
               ? item.quantidade
-              : converterQuantidade(item.quantidade, item.unidade, mp?.unidade);
+              : converterQuantidade(item.quantidade, item.unidade, unidadePreco);
             const valorTotal = quantidadeParaCusto * valorUnitario;
+            const apresentacoesDaMp = mp?.apresentacoes || [];
             return (
               <tr key={item.materia_prima_id} className="border-b border-line last:border-0">
                 <td className="py-2">
@@ -506,6 +525,25 @@ function ReceitaDetalhe({ receita }) {
                     {ehSubReceita && <Layers size={12} className="text-sage shrink-0" />}
                     {item.nome || mp?.nome}
                   </span>
+                </td>
+                <td className="py-2">
+                  {!ehSubReceita && apresentacoesDaMp.length > 0 ? (
+                    <select
+                      value={item.apresentacao_id || ""}
+                      onChange={(e) => alterarApresentacao(item.materia_prima_id, e.target.value)}
+                      className="px-1.5 py-1 border border-line rounded-md text-xs bg-surface"
+                    >
+                      <option value="">— padrão da matéria-prima —</option>
+                      {apresentacoesDaMp.map((a) => (
+                        <option key={a.id} value={a.id}>{a.forma}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-xs text-muted">—</span>
+                  )}
+                  {efetivo?.viaRendimento && (
+                    <span className="block text-[10px] text-sage mt-0.5">custo via rendimento</span>
+                  )}
                 </td>
                 <td className="py-2">
                   <input
@@ -533,7 +571,7 @@ function ReceitaDetalhe({ receita }) {
           })}
           {itens.length === 0 && (
             <tr>
-              <td colSpan={6} className="py-6 text-center text-muted text-sm">
+              <td colSpan={7} className="py-6 text-center text-muted text-sm">
                 Nenhum ingrediente ainda — pesquise acima, ou envie o PDF da ficha técnica.
               </td>
             </tr>
