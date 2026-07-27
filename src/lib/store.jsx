@@ -123,6 +123,13 @@ export function StoreProvider({ children }) {
     setReceitas((prev) => prev.map((r) => (r.id === receitaId ? { ...r, itens } : r)));
   }, []);
 
+  const atualizarReceitaPapel = useCallback(async (receitaId, papel) => {
+    if (!isDemoMode) {
+      await postAction("updateReceitaPapel", { id: receitaId, papel });
+    }
+    setReceitas((prev) => prev.map((r) => (r.id === receitaId ? { ...r, papel } : r)));
+  }, []);
+
   const enviarFichaPdf = useCallback(async (receitaId, arquivo) => {
     const dataHoje = new Date().toISOString().slice(0, 10);
 
@@ -339,6 +346,7 @@ export function StoreProvider({ children }) {
     adicionarMateriaPrima,
     adicionarReceita,
     atualizarItensReceita,
+    atualizarReceitaPapel,
     enviarFichaPdf,
     atualizarRendimentoReceita,
     adicionarApresentacao,
