@@ -40,18 +40,28 @@ export function converterQuantidade(quantidade, deUnidade, paraUnidade) {
 // rendimento (já embutindo a perda de limpeza) em vez do preço de compra bruto
 // da matéria-prima. Prioriza o rendimento marcado como padrão para aquela
 // apresentação; se não houver um marcado, usa o primeiro encontrado.
+//
+// Se o item estiver marcado como `usa_custo_cozido` (ex: hambúrguer já assado
+// entrando na montagem de um lanche), usa o custo real por kg COZIDO em vez
+// do líquido — já que nesse caso a quantidade lançada representa o peso
+// depois do preparo, não antes.
 export function custoEfetivoIngrediente(item, mp) {
   if (!mp) return { valorUnitario: 0, unidadePreco: item?.unidade, viaRendimento: false };
 
   if (item?.apresentacao_id) {
     const rendimentos = (mp.rendimentos || []).filter((r) => r.apresentacao_id === item.apresentacao_id);
     const rendimento = rendimentos.find((r) => r.e_padrao) || rendimentos[0];
-    if (rendimento && rendimento.custo_real_kg_liquido) {
-      return { valorUnitario: rendimento.custo_real_kg_liquido, unidadePreco: "kg", viaRendimento: true };
+    if (rendimento) {
+      if (item.usa_custo_cozido && rendimento.tipo_coccao !== "N/A" && rendimento.custo_real_kg_cozido) {
+        return { valorUnitario: rendimento.custo_real_kg_cozido, unidadePreco: "kg", viaRendimento: true, base: "cozido" };
+      }
+      if (rendimento.custo_real_kg_liquido) {
+        return { valorUnitario: rendimento.custo_real_kg_liquido, unidadePreco: "kg", viaRendimento: true, base: "liquido" };
+      }
     }
   }
 
-  return { valorUnitario: mp.preco_atual, unidadePreco: mp.unidade, viaRendimento: false };
+  return { valorUnitario: mp.preco_atual, unidadePreco: mp.unidade, viaRendimento: false, base: null };
 }
 
 export function custoIngredientes(itens, materiasPrimasById, receitasById = {}, visitados = new Set()) {
