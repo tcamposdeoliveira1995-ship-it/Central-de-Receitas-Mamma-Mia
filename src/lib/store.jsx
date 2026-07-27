@@ -95,11 +95,11 @@ export function StoreProvider({ children }) {
   const adicionarMateriaPrima = useCallback(async (nova) => {
     if (!isDemoMode) {
       const criada = await postAction("addMateriaPrima", nova);
-      const item = { historico: [], ...criada };
+      const item = { historico: [], apresentacoes: [], rendimentos: [], ...criada };
       setMateriasPrimas((prev) => [...prev, item]);
       return item;
     }
-    const item = { id: `mp-${Date.now()}`, historico: [], ...nova };
+    const item = { id: `mp-${Date.now()}`, historico: [], apresentacoes: [], rendimentos: [], ...nova };
     setMateriasPrimas((prev) => [...prev, item]);
     return item;
   }, []);
@@ -162,6 +162,162 @@ export function StoreProvider({ children }) {
     );
   }, []);
 
+  // ── APRESENTAÇÃO DA MATÉRIA-PRIMA ──────────────────────────────
+
+  const adicionarApresentacao = useCallback(async (materiaPrimaId, dados) => {
+    const payload = { materia_prima_id: materiaPrimaId, ...dados };
+    let criada;
+    if (!isDemoMode) {
+      criada = await postAction("addApresentacao", payload);
+    } else {
+      criada = { id: `ap-${Date.now()}`, ...payload, ativo: dados.ativo !== false };
+    }
+    setMateriasPrimas((prev) =>
+      prev.map((mp) => {
+        if (mp.id !== materiaPrimaId) return mp;
+        const atuais = criada.e_padrao
+          ? (mp.apresentacoes || []).map((a) => ({ ...a, e_padrao: false }))
+          : mp.apresentacoes || [];
+        return { ...mp, apresentacoes: [...atuais, criada] };
+      })
+    );
+    return criada;
+  }, []);
+
+  const atualizarApresentacao = useCallback(async (materiaPrimaId, id, dados) => {
+    if (!isDemoMode) {
+      await postAction("updateApresentacao", { id, ...dados });
+    }
+    setMateriasPrimas((prev) =>
+      prev.map((mp) =>
+        mp.id !== materiaPrimaId
+          ? mp
+          : {
+              ...mp,
+              apresentacoes: (mp.apresentacoes || []).map((a) => (a.id === id ? { ...a, ...dados } : a)),
+            }
+      )
+    );
+  }, []);
+
+  const definirApresentacaoPadrao = useCallback(async (materiaPrimaId, id) => {
+    if (!isDemoMode) {
+      await postAction("setApresentacaoPadrao", { id });
+    }
+    setMateriasPrimas((prev) =>
+      prev.map((mp) =>
+        mp.id !== materiaPrimaId
+          ? mp
+          : {
+              ...mp,
+              apresentacoes: (mp.apresentacoes || []).map((a) => ({ ...a, e_padrao: a.id === id })),
+            }
+      )
+    );
+  }, []);
+
+  const removerApresentacao = useCallback(async (materiaPrimaId, id) => {
+    if (!isDemoMode) {
+      await postAction("deleteApresentacao", { id });
+    }
+    setMateriasPrimas((prev) =>
+      prev.map((mp) =>
+        mp.id !== materiaPrimaId
+          ? mp
+          : { ...mp, apresentacoes: (mp.apresentacoes || []).filter((a) => a.id !== id) }
+      )
+    );
+  }, []);
+
+  // ── RENDIMENTO (FATOR DE CORREÇÃO / COCÇÃO) ────────────────────
+
+  const adicionarRendimento = useCallback(async (materiaPrimaId, dados) => {
+    const payload = { materia_prima_id: materiaPrimaId, ...dados };
+    let criado;
+    if (!isDemoMode) {
+      criado = await postAction("addRendimento", payload);
+    } else {
+      const pesoLiquido = Number(dados.peso_liquido) || 0;
+      const pesoBruto = Number(dados.peso_bruto) || 0;
+      const pesoPosCoccao = Number(dados.peso_pos_coccao) || 0;
+      const precoCompraKgBruto = Number(dados.preco_compra_kg_bruto) || 0;
+      const fator_correcao = pesoLiquido > 0 ? pesoBruto / pesoLiquido : 0;
+      const fator_coccao =
+        dados.tipo_coccao && dados.tipo_coccao !== "N/A" && pesoLiquido > 0 ? pesoPosCoccao / pesoLiquido : 1;
+      const custo_real_kg_liquido = precoCompraKgBruto * fator_correcao;
+      const custo_real_kg_cozido = fator_coccao > 0 ? custo_real_kg_liquido / fator_coccao : custo_real_kg_liquido;
+      criado = {
+        id: `rd-${Date.now()}`,
+        ...payload,
+        fator_correcao: Number(fator_correcao.toFixed(4)),
+        fator_coccao: Number(fator_coccao.toFixed(4)),
+        custo_real_kg_liquido: Number(custo_real_kg_liquido.toFixed(2)),
+        custo_real_kg_cozido: Number(custo_real_kg_cozido.toFixed(2)),
+      };
+    }
+    setMateriasPrimas((prev) =>
+      prev.map((mp) => {
+        if (mp.id !== materiaPrimaId) return mp;
+        const atuais = criado.e_padrao
+          ? (mp.rendimentos || []).map((r) =>
+              r.apresentacao_id === criado.apresentacao_id ? { ...r, e_padrao: false } : r
+            )
+          : mp.rendimentos || [];
+        return { ...mp, rendimentos: [...atuais, criado] };
+      })
+    );
+    return criado;
+  }, []);
+
+  const atualizarRendimento = useCallback(async (materiaPrimaId, id, dados) => {
+    let atualizado;
+    if (!isDemoMode) {
+      atualizado = await postAction("updateRendimento", { id, ...dados });
+    }
+    setMateriasPrimas((prev) =>
+      prev.map((mp) =>
+        mp.id !== materiaPrimaId
+          ? mp
+          : {
+              ...mp,
+              rendimentos: (mp.rendimentos || []).map((r) =>
+                r.id === id ? { ...r, ...dados, ...(atualizado || {}) } : r
+              ),
+            }
+      )
+    );
+  }, []);
+
+  const definirRendimentoPadrao = useCallback(async (materiaPrimaId, id) => {
+    if (!isDemoMode) {
+      await postAction("setRendimentoPadrao", { id });
+    }
+    setMateriasPrimas((prev) =>
+      prev.map((mp) => {
+        if (mp.id !== materiaPrimaId) return mp;
+        const alvo = (mp.rendimentos || []).find((r) => r.id === id);
+        if (!alvo) return mp;
+        return {
+          ...mp,
+          rendimentos: (mp.rendimentos || []).map((r) =>
+            r.apresentacao_id === alvo.apresentacao_id ? { ...r, e_padrao: r.id === id } : r
+          ),
+        };
+      })
+    );
+  }, []);
+
+  const removerRendimento = useCallback(async (materiaPrimaId, id) => {
+    if (!isDemoMode) {
+      await postAction("deleteRendimento", { id });
+    }
+    setMateriasPrimas((prev) =>
+      prev.map((mp) =>
+        mp.id !== materiaPrimaId ? mp : { ...mp, rendimentos: (mp.rendimentos || []).filter((r) => r.id !== id) }
+      )
+    );
+  }, []);
+
   const value = {
     loading,
     categorias,
@@ -177,6 +333,14 @@ export function StoreProvider({ children }) {
     atualizarItensReceita,
     enviarFichaPdf,
     atualizarRendimentoReceita,
+    adicionarApresentacao,
+    atualizarApresentacao,
+    definirApresentacaoPadrao,
+    removerApresentacao,
+    adicionarRendimento,
+    atualizarRendimento,
+    definirRendimentoPadrao,
+    removerRendimento,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
