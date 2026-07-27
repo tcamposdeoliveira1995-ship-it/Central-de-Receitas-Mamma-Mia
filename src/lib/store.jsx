@@ -246,6 +246,12 @@ export function StoreProvider({ children }) {
         dados.tipo_coccao && dados.tipo_coccao !== "N/A" && pesoLiquido > 0 ? pesoPosCoccao / pesoLiquido : 1;
       const custo_real_kg_liquido = precoCompraKgBruto * fator_correcao;
       const custo_real_kg_cozido = fator_coccao > 0 ? custo_real_kg_liquido / fator_coccao : custo_real_kg_liquido;
+      const quantidadeUnidades = Number(dados.quantidade_unidades) || 0;
+      const peso_unidade_liquido = quantidadeUnidades > 0 ? pesoLiquido / quantidadeUnidades : 0;
+      const peso_unidade_cozido =
+        quantidadeUnidades > 0 && dados.tipo_coccao && dados.tipo_coccao !== "N/A"
+          ? pesoPosCoccao / quantidadeUnidades
+          : peso_unidade_liquido;
       criado = {
         id: `rd-${Date.now()}`,
         ...payload,
@@ -253,6 +259,8 @@ export function StoreProvider({ children }) {
         fator_coccao: Number(fator_coccao.toFixed(4)),
         custo_real_kg_liquido: Number(custo_real_kg_liquido.toFixed(2)),
         custo_real_kg_cozido: Number(custo_real_kg_cozido.toFixed(2)),
+        peso_unidade_liquido: Number(peso_unidade_liquido.toFixed(6)),
+        peso_unidade_cozido: Number(peso_unidade_cozido.toFixed(6)),
       };
     }
     setMateriasPrimas((prev) =>
