@@ -492,8 +492,17 @@ function RendimentosSecao({ mp, onAdicionar, onDefinirPadrao, onRemover }) {
               <span>FCoc: {r.fator_coccao} ({r.tipo_coccao})</span>
               <span>Custo/kg líquido: {formatBRL(r.custo_real_kg_liquido)}</span>
               <span>Custo/kg cozido: {formatBRL(r.custo_real_kg_cozido)}</span>
+              {!!r.quantidade_unidades && (
+                <>
+                  <span>Peso/unidade líquido: {formatNumeroG_(r.peso_unidade_liquido)}</span>
+                  <span>Peso/unidade cozido: {formatNumeroG_(r.peso_unidade_cozido)}</span>
+                </>
+              )}
             </div>
             {r.observacoes && <p className="text-xs text-muted mt-1">{r.observacoes}</p>}
+            {!!r.quantidade_unidades && r.peso_unidade_cozido > 0 && (
+              <CalculadoraKgParaUnidades pesoUnidadeKg={r.peso_unidade_cozido} rotulo={nomeApresentacao(r.apresentacao_id)} />
+            )}
           </li>
         ))}
       </ul>
@@ -512,6 +521,33 @@ function RendimentosSecao({ mp, onAdicionar, onDefinirPadrao, onRemover }) {
   );
 }
 
+function formatNumeroG_(pesoKg) {
+  if (!pesoKg) return "—";
+  return pesoKg < 1 ? `${(pesoKg * 1000).toFixed(1)}g` : `${pesoKg.toFixed(3)}kg`;
+}
+
+function CalculadoraKgParaUnidades({ pesoUnidadeKg, rotulo }) {
+  const [pesoTotal, setPesoTotal] = useState("");
+  const total = parseFloat(String(pesoTotal).replace(",", ".")) || 0;
+  const unidades = pesoUnidadeKg > 0 ? total / pesoUnidadeKg : 0;
+
+  return (
+    <div className="mt-2 flex items-center gap-2 text-xs bg-surface rounded-md px-2 py-1.5 border border-line">
+      <span className="text-muted whitespace-nowrap">Eu fiz</span>
+      <input
+        value={pesoTotal}
+        onChange={(e) => setPesoTotal(e.target.value)}
+        placeholder="Ex: 6"
+        className="w-16 px-1.5 py-0.5 border border-line rounded text-xs font-mono-num"
+      />
+      <span className="text-muted whitespace-nowrap">kg de {rotulo} =</span>
+      <span className="font-mono-num font-medium text-sage">
+        {total > 0 ? Math.round(unidades) : "—"} un
+      </span>
+    </div>
+  );
+}
+
 function NovoRendimentoForm({ apresentacoes, onSalvar, onCancelar }) {
   const [form, setForm] = useState({
     apresentacao_id: apresentacoes[0]?.id || "",
@@ -520,6 +556,7 @@ function NovoRendimentoForm({ apresentacoes, onSalvar, onCancelar }) {
     tipo_coccao: "N/A",
     peso_pos_coccao: "",
     preco_compra_kg_bruto: "",
+    quantidade_unidades: "",
     responsavel_teste: "",
     observacoes: "",
     e_padrao: false,
@@ -542,6 +579,7 @@ function NovoRendimentoForm({ apresentacoes, onSalvar, onCancelar }) {
       peso_liquido: numero(form.peso_liquido),
       peso_pos_coccao: numero(form.peso_pos_coccao),
       preco_compra_kg_bruto: numero(form.preco_compra_kg_bruto),
+      quantidade_unidades: numero(form.quantidade_unidades),
     });
   }
 
@@ -611,6 +649,14 @@ function NovoRendimentoForm({ apresentacoes, onSalvar, onCancelar }) {
         </Campo>
         <Campo label="Responsável pelo teste">
           <input value={form.responsavel_teste} onChange={(e) => set("responsavel_teste", e.target.value)} className="input" />
+        </Campo>
+        <Campo label="Quantas unidades foram pesadas nesse teste?">
+          <input
+            value={form.quantidade_unidades}
+            onChange={(e) => set("quantidade_unidades", e.target.value)}
+            placeholder="Ex: 1 (deixa em branco se não vende por unidade)"
+            className="input"
+          />
         </Campo>
       </div>
       <Campo label="Observações">
