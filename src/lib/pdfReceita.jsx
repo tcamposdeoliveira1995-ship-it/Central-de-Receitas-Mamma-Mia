@@ -139,7 +139,7 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
             <Text style={styles.empresa}>{receita.empresa}</Text>
           </View>
           <View style={{ alignItems: "flex-end", gap: 6 }}>
-            <Image src="/logo-fundo.png" style={styles.logoPequeno} />
+            <Image src="/logo-monograma.png" style={styles.logoPequeno} />
             {receita.papel ? <Text style={styles.badge}>{LABEL_PAPEL[receita.papel] || receita.papel}</Text> : null}
           </View>
         </View>
