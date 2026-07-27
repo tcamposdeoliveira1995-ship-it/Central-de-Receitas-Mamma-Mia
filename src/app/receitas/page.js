@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { Plus, Search, X, ChevronRight, Upload, FileText, Check, Loader2, Layers } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { calcularCMV, custoPorKgReceita, custoEfetivoIngrediente, converterQuantidade, formatBRL, formatNumber } from "@/lib/calc";
@@ -175,7 +175,7 @@ function ReceitaDetalhe({ receita }) {
   const temResultados = resultadosBusca.mps.length > 0 || resultadosBusca.subReceitas.length > 0;
 
   // Sincroniza quando troca de receita selecionada
-  useMemo(() => {
+  useEffect(() => {
     setItens(comIdGarantido_(receita.itens));
     setPdfPendente(null);
     setErroPdf("");
@@ -186,10 +186,25 @@ function ReceitaDetalhe({ receita }) {
   }
 
   function adicionarIngrediente(mp) {
-    // Não bloqueia mais duplicata — a mesma matéria-prima pode aparecer em
-    // mais de uma linha (ex: farinha na massa E farinha pra polvilhar),
-    // distinguidas pela apresentação e/ou pela observação.
     const apresentacaoPadrao = (mp.apresentacoes || []).find((a) => a.e_padrao);
+    const apresentacaoIdNova = apresentacaoPadrao?.id || "";
+
+    // Não bloqueia duplicata (farinha na massa + farinha pra polvilhar é um
+    // caso válido) — mas avisa se for uma duplicata EXATA (mesma apresentação,
+    // sem observação diferenciando), que costuma ser clique repetido sem querer.
+    const jaExisteIdentico = itens.some(
+      (i) => i.materia_prima_id === mp.id && (i.apresentacao_id || "") === apresentacaoIdNova && !i.observacao
+    );
+    if (jaExisteIdentico) {
+      const confirmar = confirm(
+        `"${mp.nome}" já está nessa receita com a mesma apresentação e sem observação — parece duplicata. Adicionar mesmo assim?`
+      );
+      if (!confirmar) {
+        setBusca("");
+        return;
+      }
+    }
+
     const novosItens = [
       ...itens,
       {
@@ -199,7 +214,7 @@ function ReceitaDetalhe({ receita }) {
         quantidade: 1,
         unidade: apresentacaoPadrao?.unidade || mp.unidade,
         tipo: "materia_prima",
-        apresentacao_id: apresentacaoPadrao?.id || "",
+        apresentacao_id: apresentacaoIdNova,
         observacao: "",
         usa_custo_cozido: false,
       },
