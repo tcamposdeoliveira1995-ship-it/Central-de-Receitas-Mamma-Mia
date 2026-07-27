@@ -524,6 +524,7 @@ function NovoRendimentoForm({ apresentacoes, onSalvar, onCancelar }) {
     observacoes: "",
     e_padrao: false,
   });
+  const [precoPorUnidade, setPrecoPorUnidade] = useState("");
 
   function set(campo, valor) {
     setForm((f) => ({ ...f, [campo]: valor }));
@@ -583,6 +584,30 @@ function NovoRendimentoForm({ apresentacoes, onSalvar, onCancelar }) {
             placeholder="R$"
             className="input"
           />
+        </Campo>
+        <Campo label="ou: preço por unidade comprada (R$)">
+          <input
+            value={precoPorUnidade}
+            onChange={(e) => {
+              const valor = e.target.value;
+              setPrecoPorUnidade(valor);
+              const pesoBrutoKg = numero(form.peso_bruto);
+              if (pesoBrutoKg > 0 && valor !== "") {
+                set("preco_compra_kg_bruto", (numero(valor) / pesoBrutoKg).toFixed(4));
+              }
+            }}
+            placeholder="Ex: 0,67 (calcula o R$/kg sozinho)"
+            disabled={!numero(form.peso_bruto)}
+            className="input disabled:opacity-50"
+          />
+          {!numero(form.peso_bruto) && (
+            <p className="text-[11px] text-muted mt-0.5">preenche o peso bruto primeiro</p>
+          )}
+          {numero(form.peso_bruto) > 0 && precoPorUnidade !== "" && (
+            <p className="text-[11px] text-sage mt-0.5">
+              = R$ {(numero(precoPorUnidade) / numero(form.peso_bruto)).toFixed(2)}/kg
+            </p>
+          )}
         </Campo>
         <Campo label="Responsável pelo teste">
           <input value={form.responsavel_teste} onChange={(e) => set("responsavel_teste", e.target.value)} className="input" />
