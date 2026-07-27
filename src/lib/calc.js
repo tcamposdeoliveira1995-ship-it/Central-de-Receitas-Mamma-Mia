@@ -35,6 +35,25 @@ export function converterQuantidade(quantidade, deUnidade, paraUnidade) {
   return quantidade;
 }
 
+// Quando um item de receita aponta pra uma Apresentação (ex: "Frango — Cubos")
+// que tem um Rendimento cadastrado, usamos o custo real por kg líquido daquele
+// rendimento (já embutindo a perda de limpeza) em vez do preço de compra bruto
+// da matéria-prima. Prioriza o rendimento marcado como padrão para aquela
+// apresentação; se não houver um marcado, usa o primeiro encontrado.
+export function custoEfetivoIngrediente(item, mp) {
+  if (!mp) return { valorUnitario: 0, unidadePreco: item?.unidade, viaRendimento: false };
+
+  if (item?.apresentacao_id) {
+    const rendimentos = (mp.rendimentos || []).filter((r) => r.apresentacao_id === item.apresentacao_id);
+    const rendimento = rendimentos.find((r) => r.e_padrao) || rendimentos[0];
+    if (rendimento && rendimento.custo_real_kg_liquido) {
+      return { valorUnitario: rendimento.custo_real_kg_liquido, unidadePreco: "kg", viaRendimento: true };
+    }
+  }
+
+  return { valorUnitario: mp.preco_atual, unidadePreco: mp.unidade, viaRendimento: false };
+}
+
 export function custoIngredientes(itens, materiasPrimasById, receitasById = {}, visitados = new Set()) {
   return itens.reduce((total, item) => {
     if (item.tipo === "receita") {
@@ -45,8 +64,9 @@ export function custoIngredientes(itens, materiasPrimasById, receitasById = {}, 
     }
     const mp = materiasPrimasById[item.materia_prima_id];
     if (!mp) return total;
-    const quantidadeNaUnidadeDoPreco = converterQuantidade(item.quantidade, item.unidade, mp.unidade);
-    return total + quantidadeNaUnidadeDoPreco * mp.preco_atual;
+    const { valorUnitario, unidadePreco } = custoEfetivoIngrediente(item, mp);
+    const quantidadeNaUnidadeDoPreco = converterQuantidade(item.quantidade, item.unidade, unidadePreco);
+    return total + quantidadeNaUnidadeDoPreco * valorUnitario;
   }, 0);
 }
 
