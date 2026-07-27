@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Save, Check, Loader2 } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { calcularCMV, calcularRendimento, formatBRL, formatNumber } from "@/lib/calc";
+import { calcularCMV, calcularRendimento, pesoTotalIngredientes, formatBRL, formatNumber } from "@/lib/calc";
 
 export default function RendimentoPage() {
   const { receitas, materiasPrimasById, receitasById, atualizarRendimentoReceita } = useStore();
@@ -38,6 +38,11 @@ export default function RendimentoPage() {
       materiasPrimasById,
       receitasById,
     });
+  }, [receita, materiasPrimasById, receitasById]);
+
+  const pesoCalculado = useMemo(() => {
+    if (!receita) return { total: 0, itensNaoConvertidos: [] };
+    return pesoTotalIngredientes(receita.itens || [], materiasPrimasById, receitasById);
   }, [receita, materiasPrimasById, receitasById]);
 
   const resultado = calcularRendimento({
@@ -98,8 +103,30 @@ export default function RendimentoPage() {
             <div className="bg-surface border border-line rounded-lg p-5">
               <h2 className="font-display text-lg mb-4">Entrada — pesos (kg)</h2>
               <div className="space-y-3">
-                <Campo label="Peso dos ingredientes" value={pesos.pesoIngredientes} onChange={(v) => set("pesoIngredientes", v)} />
+                <div>
+                  <Campo label="Peso dos ingredientes" value={pesos.pesoIngredientes} onChange={(v) => set("pesoIngredientes", v)} />
+                  <div className="mt-1.5 flex items-center justify-between text-xs">
+                    <span className="text-muted">
+                      Soma calculada da receita: <span className="font-mono-num font-medium">{formatNumber(pesoCalculado.total, 3)} kg</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => set("pesoIngredientes", pesoCalculado.total)}
+                      className="text-sage hover:underline"
+                    >
+                      Usar esse valor
+                    </button>
+                  </div>
+                  {pesoCalculado.itensNaoConvertidos.length > 0 && (
+                    <p className="text-xs text-brick mt-1">
+                      Não entraram na soma (unidade não conversível pra peso): {pesoCalculado.itensNaoConvertidos.join(", ")}.
+                    </p>
+                  )}
+                </div>
                 <Campo label="Peso final (pronto)" value={pesos.pesoFinal} onChange={(v) => set("pesoFinal", v)} />
+                <p className="text-xs text-muted -mt-1.5">
+                  Peça pesada de verdade depois de assar/fritar/processar — o sistema não calcula isso sozinho.
+                </p>
                 <Campo label="Peso unitário (por unidade)" value={pesos.pesoUnitario} onChange={(v) => set("pesoUnitario", v)} step="0.001" />
               </div>
             </div>
