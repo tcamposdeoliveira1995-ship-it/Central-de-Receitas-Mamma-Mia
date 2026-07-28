@@ -14,8 +14,8 @@ export default function RootLayout({ children }) {
       <body className="min-h-full flex bg-background text-foreground">
         <StoreProvider>
           <Sidebar />
-          <main className="flex-1 min-h-screen overflow-y-auto">
-            <div className="max-w-6xl mx-auto px-8 py-8">
+          <main className="flex-1 min-h-screen overflow-y-auto pt-14 md:pt-0">
+            <div className="max-w-6xl mx-auto px-4 py-6 md:px-8 md:py-8">
               <LoadingGate>{children}</LoadingGate>
             </div>
           </main>
