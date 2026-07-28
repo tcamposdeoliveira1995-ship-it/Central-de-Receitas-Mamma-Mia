@@ -445,6 +445,7 @@ function ReceitaDetalhe({ receita }) {
             Extraído de <span className="font-medium">{pdfPendente.arquivo.name}</span> — corrija nome, quantidade ou
             unidade se precisar. Itens sem matéria-prima correspondente serão criados automaticamente.
           </p>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-muted border-b border-line">
@@ -506,6 +507,7 @@ function ReceitaDetalhe({ receita }) {
               )}
             </tbody>
           </table>
+          </div>
           <div className="flex items-center gap-2 mt-3">
             <button
               onClick={confirmarPdf}
@@ -573,6 +575,7 @@ function ReceitaDetalhe({ receita }) {
         </div>
       )}
 
+      <div className="overflow-x-auto">
       <table className="w-full text-sm mt-4">
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-muted border-b border-line">
@@ -658,6 +661,7 @@ function ReceitaDetalhe({ receita }) {
           )}
         </tbody>
       </table>
+      </div>
 
       <div className="mt-5">
         <label className="text-xs uppercase tracking-wide text-muted block mb-1.5">Modo de preparo</label>
