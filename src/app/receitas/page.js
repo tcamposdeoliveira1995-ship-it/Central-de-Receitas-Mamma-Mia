@@ -129,6 +129,9 @@ function ReceitaDetalhe({ receita }) {
   const [modoPreparo, setModoPreparo] = useState(receita.modo_preparo || "");
   const enviandoRef = useRef(false); // trava síncrona contra duplo clique (o state salvandoPdf é assíncrono e não pega cliques rápidos)
   const adicionandoRef = useRef(new Set()); // trava síncrona contra clique duplo ao adicionar ingrediente/sub-receita
+  const itensRef = useRef(itens); // cópia sempre atualizada de `itens` — o state do React só reflete depois de um re-render,
+  // e ler `itens` (o state) direto em cliques rápidos pega uma versão desatualizada, fazendo uma adição sobrescrever a
+  // anterior em vez de somar. Toda leitura usada pra CALCULAR o próximo valor deve usar itensRef.current, não `itens`.
 
   // Resultados de busca combinam Matérias-Primas e outras Receitas (sub-receitas,
   // ex: uma massa ou um recheio usados como ingrediente de outra receita).
@@ -146,6 +149,7 @@ function ReceitaDetalhe({ receita }) {
 
   // Sincroniza quando troca de receita selecionada
   useMemo(() => {
+    itensRef.current = receita.itens || [];
     setItens(receita.itens || []);
     setPdfPendente(null);
     setErroPdf("");
@@ -154,23 +158,31 @@ function ReceitaDetalhe({ receita }) {
     adicionandoRef.current = new Set();
   }, [receita.id]);
 
+  // Único ponto que grava mudanças nos ingredientes: atualiza a referência síncrona,
+  // o state (pra re-renderizar) e a planilha, sempre nessa ordem.
+  function commitItens(novosItens) {
+    itensRef.current = novosItens;
+    setItens(novosItens);
+    atualizarItensReceita(receita.id, novosItens);
+  }
+
   function adicionarIngrediente(mp) {
-    if (itens.some((i) => i.materia_prima_id === mp.id) || adicionandoRef.current.has(mp.id)) {
+    const atuais = itensRef.current;
+    if (atuais.some((i) => i.materia_prima_id === mp.id) || adicionandoRef.current.has(mp.id)) {
       setBusca("");
       return;
     }
     adicionandoRef.current.add(mp.id);
-    const novosItens = [
-      ...itens,
+    commitItens([
+      ...atuais,
       { materia_prima_id: mp.id, nome: mp.nome, quantidade: 1, unidade: mp.unidade, tipo: "materia_prima" },
-    ];
-    setItens(novosItens);
-    atualizarItensReceita(receita.id, novosItens);
+    ]);
     setBusca("");
   }
 
   function adicionarSubReceita(subReceita) {
-    if (itens.some((i) => i.materia_prima_id === subReceita.id) || adicionandoRef.current.has(subReceita.id)) {
+    const atuais = itensRef.current;
+    if (atuais.some((i) => i.materia_prima_id === subReceita.id) || adicionandoRef.current.has(subReceita.id)) {
       setBusca("");
       return;
     }
@@ -180,33 +192,26 @@ function ReceitaDetalhe({ receita }) {
         `"${subReceita.nome}" ainda não tem o peso final salvo no módulo Rendimento — o CMV dela vai ficar zerado até isso ser preenchido lá.`
       );
     }
-    const novosItens = [
-      ...itens,
+    commitItens([
+      ...atuais,
       { materia_prima_id: subReceita.id, nome: subReceita.nome, quantidade: 1, unidade: "kg", tipo: "receita" },
-    ];
-    setItens(novosItens);
-    atualizarItensReceita(receita.id, novosItens);
+    ]);
     setBusca("");
   }
 
   function alterarQuantidade(materiaPrimaId, quantidade) {
-    const novosItens = itens.map((i) => (i.materia_prima_id === materiaPrimaId ? { ...i, quantidade } : i));
-    setItens(novosItens);
-    atualizarItensReceita(receita.id, novosItens);
+    commitItens(itensRef.current.map((i) => (i.materia_prima_id === materiaPrimaId ? { ...i, quantidade } : i)));
   }
 
   function removerIngrediente(materiaPrimaId) {
     adicionandoRef.current.delete(materiaPrimaId);
-    const novosItens = itens.filter((i) => i.materia_prima_id !== materiaPrimaId);
-    setItens(novosItens);
-    atualizarItensReceita(receita.id, novosItens);
+    commitItens(itensRef.current.filter((i) => i.materia_prima_id !== materiaPrimaId));
   }
 
   function limparTodosIngredientes() {
     if (!confirm("Remover todos os ingredientes desta receita? Essa ação não pode ser desfeita.")) return;
     adicionandoRef.current = new Set();
-    setItens([]);
-    atualizarItensReceita(receita.id, []);
+    commitItens([]);
   }
 
   function alterarPapel(novoPapel) {
@@ -220,11 +225,15 @@ function ReceitaDetalhe({ receita }) {
   }
 
   function alterarDetalheItemLocal(materiaPrimaId, campo, valor) {
-    setItens((prev) => prev.map((i) => (i.materia_prima_id === materiaPrimaId ? { ...i, [campo]: valor } : i)));
+    const atualizados = itensRef.current.map((i) =>
+      i.materia_prima_id === materiaPrimaId ? { ...i, [campo]: valor } : i
+    );
+    itensRef.current = atualizados;
+    setItens(atualizados);
   }
 
   function salvarItensAtual() {
-    atualizarItensReceita(receita.id, itens);
+    atualizarItensReceita(receita.id, itensRef.current);
   }
 
   async function baixarPdf() {
@@ -345,12 +354,13 @@ function ReceitaDetalhe({ receita }) {
       }
 
       // 2) mescla com os ingredientes que já existiam na receita
-      const mesclados = [...itens];
+      const mesclados = [...itensRef.current];
       for (const novo of itensParaAdicionar) {
         const idx = mesclados.findIndex((i) => i.materia_prima_id === novo.materia_prima_id);
         if (idx >= 0) mesclados[idx] = novo;
         else mesclados.push(novo);
       }
+      itensRef.current = mesclados;
       setItens(mesclados);
       await atualizarItensReceita(receita.id, mesclados);
 
