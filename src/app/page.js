@@ -73,6 +73,7 @@ export default function DashboardPage() {
         <div className="px-5 py-4 border-b border-line">
           <h2 className="font-display text-lg">CMV por receita</h2>
         </div>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-muted border-b border-line">
@@ -95,6 +96,7 @@ export default function DashboardPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </section>
     </div>
   );
