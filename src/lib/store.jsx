@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { isDemoMode, fetchAll, postAction } from "./sheetsClient";
 import { arquivoParaBase64 } from "./pdfText";
 import * as seed from "./seed";
@@ -14,6 +14,21 @@ export function StoreProvider({ children }) {
   const [receitas, setReceitas] = useState(isDemoMode ? seed.receitas : []);
   const [producoes, setProducoes] = useState(isDemoMode ? seed.producoes : []);
   const [loading, setLoading] = useState(!isDemoMode);
+
+  // Fila de gravação por chave (ex: por receita) — garante que duas chamadas pra
+  // salvar a MESMA coisa nunca rodem em paralelo. Sem isso, se duas gravações saem
+  // quase juntas (ex: apagar um ingrediente logo depois de editar outro campo), a
+  // que chega por último no servidor "vence" e pode desfazer a mudança mais recente,
+  // mesmo sem nenhum erro aparecer — porque tecnicamente nenhuma das duas falhou.
+  const filasRef = useRef({});
+  const enfileirar = useCallback((chave, tarefa) => {
+    const anterior = filasRef.current[chave] || Promise.resolve();
+    const atual = anterior.then(tarefa, tarefa).catch((err) => {
+      console.error(`Erro na fila de gravação (${chave}):`, err);
+    });
+    filasRef.current[chave] = atual;
+    return atual;
+  }, []);
 
   // Carrega da planilha (via Apps Script) quando a URL estiver configurada.
   useEffect(() => {
@@ -54,43 +69,48 @@ export function StoreProvider({ children }) {
     return map;
   }, [receitas]);
 
-  const atualizarPrecoMateriaPrima = useCallback(async (id, novoPreco) => {
-    const dataHoje = new Date().toISOString().slice(0, 10);
+  const atualizarPrecoMateriaPrima = useCallback(
+    async (id, novoPreco) => {
+      const dataHoje = new Date().toISOString().slice(0, 10);
 
-    if (!isDemoMode) {
-      const atualizado = await postAction("updatePrecoMateriaPrima", { id, novoPreco });
+      if (!isDemoMode) {
+        const atualizado = await enfileirar(`mp:${id}`, () =>
+          postAction("updatePrecoMateriaPrima", { id, novoPreco })
+        );
+        setMateriasPrimas((prev) =>
+          prev.map((mp) =>
+            mp.id === id
+              ? {
+                  ...mp,
+                  ...atualizado,
+                  historico: [...(mp.historico || []), { data: dataHoje, preco: novoPreco }],
+                }
+              : mp
+          )
+        );
+        return;
+      }
+
+      // Modo demonstração: recalcula localmente.
       setMateriasPrimas((prev) =>
-        prev.map((mp) =>
-          mp.id === id
-            ? {
-                ...mp,
-                ...atualizado,
-                historico: [...(mp.historico || []), { data: dataHoje, preco: novoPreco }],
-              }
-            : mp
-        )
+        prev.map((mp) => {
+          if (mp.id !== id) return mp;
+          const historico = [...(mp.historico || []), { data: dataHoje, preco: novoPreco }];
+          const precos = historico.map((h) => h.preco);
+          return {
+            ...mp,
+            preco_atual: novoPreco,
+            preco_minimo: Math.min(...precos),
+            preco_maximo: Math.max(...precos),
+            preco_medio: precos.reduce((a, b) => a + b, 0) / precos.length,
+            ultima_compra: dataHoje,
+            historico,
+          };
+        })
       );
-      return;
-    }
-
-    // Modo demonstração: recalcula localmente.
-    setMateriasPrimas((prev) =>
-      prev.map((mp) => {
-        if (mp.id !== id) return mp;
-        const historico = [...(mp.historico || []), { data: dataHoje, preco: novoPreco }];
-        const precos = historico.map((h) => h.preco);
-        return {
-          ...mp,
-          preco_atual: novoPreco,
-          preco_minimo: Math.min(...precos),
-          preco_maximo: Math.max(...precos),
-          preco_medio: precos.reduce((a, b) => a + b, 0) / precos.length,
-          ultima_compra: dataHoje,
-          historico,
-        };
-      })
-    );
-  }, []);
+    },
+    [enfileirar]
+  );
 
   const adicionarMateriaPrima = useCallback(async (nova) => {
     if (!isDemoMode) {
@@ -116,12 +136,17 @@ export function StoreProvider({ children }) {
     return item;
   }, []);
 
-  const atualizarItensReceita = useCallback(async (receitaId, itens) => {
-    if (!isDemoMode) {
-      await postAction("updateItensReceita", { receita_id: receitaId, itens });
-    }
-    setReceitas((prev) => prev.map((r) => (r.id === receitaId ? { ...r, itens } : r)));
-  }, []);
+  const atualizarItensReceita = useCallback(
+    async (receitaId, itens) => {
+      setReceitas((prev) => prev.map((r) => (r.id === receitaId ? { ...r, itens } : r)));
+      if (!isDemoMode) {
+        await enfileirar(`itens:${receitaId}`, () =>
+          postAction("updateItensReceita", { receita_id: receitaId, itens })
+        );
+      }
+    },
+    [enfileirar]
+  );
 
   const enviarFichaPdf = useCallback(async (receitaId, arquivo) => {
     const dataHoje = new Date().toISOString().slice(0, 10);
@@ -153,21 +178,31 @@ export function StoreProvider({ children }) {
     return { url };
   }, []);
 
-  const atualizarRendimentoReceita = useCallback(async (receitaId, rendimento) => {
-    if (!isDemoMode) {
-      await postAction("updateRendimentoReceita", { receita_id: receitaId, ...rendimento });
-    }
-    setReceitas((prev) =>
-      prev.map((r) => (r.id === receitaId ? { ...r, rendimento: { ...r.rendimento, ...rendimento } } : r))
-    );
-  }, []);
+  const atualizarRendimentoReceita = useCallback(
+    async (receitaId, rendimento) => {
+      setReceitas((prev) =>
+        prev.map((r) => (r.id === receitaId ? { ...r, rendimento: { ...r.rendimento, ...rendimento } } : r))
+      );
+      if (!isDemoMode) {
+        await enfileirar(`rendimento:${receitaId}`, () =>
+          postAction("updateRendimentoReceita", { receita_id: receitaId, ...rendimento })
+        );
+      }
+    },
+    [enfileirar]
+  );
 
-  const atualizarDetalhesReceita = useCallback(async (receitaId, detalhes) => {
-    if (!isDemoMode) {
-      await postAction("updateDetalhesReceita", { receita_id: receitaId, ...detalhes });
-    }
-    setReceitas((prev) => prev.map((r) => (r.id === receitaId ? { ...r, ...detalhes } : r)));
-  }, []);
+  const atualizarDetalhesReceita = useCallback(
+    async (receitaId, detalhes) => {
+      setReceitas((prev) => prev.map((r) => (r.id === receitaId ? { ...r, ...detalhes } : r)));
+      if (!isDemoMode) {
+        await enfileirar(`detalhes:${receitaId}`, () =>
+          postAction("updateDetalhesReceita", { receita_id: receitaId, ...detalhes })
+        );
+      }
+    },
+    [enfileirar]
+  );
 
   const value = {
     loading,
