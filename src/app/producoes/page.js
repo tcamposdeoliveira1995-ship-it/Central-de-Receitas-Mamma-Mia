@@ -17,6 +17,7 @@ export default function ProducoesPage() {
       </header>
 
       <div className="bg-surface border border-line rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-muted border-b border-line">
@@ -54,6 +55,7 @@ export default function ProducoesPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
