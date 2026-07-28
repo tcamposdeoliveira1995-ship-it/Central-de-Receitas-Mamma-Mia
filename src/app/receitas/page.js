@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Plus, Search, X, ChevronRight, Upload, FileText, Check, Loader2, Layers, Download } from "lucide-react";
+import { Plus, Search, X, ChevronRight, Upload, FileText, Check, Loader2, Layers, Download, Flame } from "lucide-react";
 import { pdf } from "@react-pdf/renderer";
 import { useStore } from "@/lib/store";
-import { calcularCMV, custoPorKgReceita, converterQuantidade, formatBRL, formatNumber } from "@/lib/calc";
+import { calcularCMV, custoPorKgReceita, custoEfetivoIngrediente, converterQuantidade, formatBRL, formatNumber } from "@/lib/calc";
 import { extrairTextoPDF } from "@/lib/pdfText";
 import { parseTextoReceita, encontrarMateriaPrimaPorNome } from "@/lib/parseReceita";
 import { FichaReceitaPDF } from "@/lib/pdfReceita";
@@ -235,6 +235,18 @@ function ReceitaDetalhe({ receita }) {
     commitItens(itensRef.current.map((i) => (i.linha_id === linhaId ? { ...i, quantidade } : i)));
   }
 
+  function alterarApresentacaoItem(linhaId, apresentacaoId) {
+    commitItens(
+      itensRef.current.map((i) => (i.linha_id === linhaId ? { ...i, apresentacao_id: apresentacaoId } : i))
+    );
+  }
+
+  function alternarCustoCozido(linhaId) {
+    commitItens(
+      itensRef.current.map((i) => (i.linha_id === linhaId ? { ...i, usa_custo_cozido: !i.usa_custo_cozido } : i))
+    );
+  }
+
   function removerIngrediente(linhaId) {
     commitItens(itensRef.current.filter((i) => i.linha_id !== linhaId));
   }
@@ -272,13 +284,14 @@ function ReceitaDetalhe({ receita }) {
         const ehSubReceita = item.tipo === "receita";
         const subReceita = ehSubReceita ? receitasById[item.materia_prima_id] : null;
         const mp = !ehSubReceita ? materiasPrimasById[item.materia_prima_id] : null;
+        const efetivo = !ehSubReceita ? custoEfetivoIngrediente(item, mp) : null;
         const valorUnitario = ehSubReceita
           ? custoPorKgReceita(subReceita, receitasById, materiasPrimasById)
-          : mp?.preco_atual || 0;
-        const unidadePreco = ehSubReceita ? "kg" : mp?.unidade || item.unidade;
+          : efetivo.valorUnitario;
+        const unidadePreco = ehSubReceita ? "kg" : efetivo.unidadePreco;
         const quantidadeParaCusto = ehSubReceita
           ? item.quantidade
-          : converterQuantidade(item.quantidade, item.unidade, mp?.unidade);
+          : converterQuantidade(item.quantidade, item.unidade, unidadePreco);
         return {
           nome: item.nome || mp?.nome,
           apresentacao: item.apresentacao,
@@ -637,14 +650,21 @@ function ReceitaDetalhe({ receita }) {
             const ehSubReceita = item.tipo === "receita";
             const subReceita = ehSubReceita ? receitasById[item.materia_prima_id] : null;
             const mp = !ehSubReceita ? materiasPrimasById[item.materia_prima_id] : null;
+            const efetivo = !ehSubReceita ? custoEfetivoIngrediente(item, mp) : null;
             const valorUnitario = ehSubReceita
               ? custoPorKgReceita(subReceita, receitasById, materiasPrimasById)
-              : mp?.preco_atual || 0;
-            const unidadePreco = ehSubReceita ? "kg" : mp?.unidade || item.unidade;
+              : efetivo.valorUnitario;
+            const unidadePreco = ehSubReceita ? "kg" : efetivo.unidadePreco;
             const quantidadeParaCusto = ehSubReceita
               ? item.quantidade
-              : converterQuantidade(item.quantidade, item.unidade, mp?.unidade);
+              : converterQuantidade(item.quantidade, item.unidade, unidadePreco);
             const valorTotal = quantidadeParaCusto * valorUnitario;
+            const apresentacoesMp = mp?.apresentacoes || [];
+            const apresentacaoEscolhida = apresentacoesMp.find((a) => a.id === item.apresentacao_id);
+            const rendimentosDaApresentacao = apresentacaoEscolhida
+              ? (mp.rendimentos || []).filter((r) => r.apresentacao_id === apresentacaoEscolhida.id)
+              : [];
+            const temCozido = rendimentosDaApresentacao.some((r) => r.custo_real_kg_cozido > 0);
             return (
               <tr key={item.linha_id} className="border-b border-line last:border-0">
                 <td className="py-2">
@@ -652,6 +672,37 @@ function ReceitaDetalhe({ receita }) {
                     {ehSubReceita && <Layers size={12} className="text-sage shrink-0" />}
                     {item.nome || mp?.nome}
                   </span>
+                  {!ehSubReceita && apresentacoesMp.length > 0 && (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <select
+                        value={item.apresentacao_id || ""}
+                        onChange={(e) => alterarApresentacaoItem(item.linha_id, e.target.value)}
+                        className="text-xs px-1.5 py-0.5 border border-line rounded text-muted bg-surface"
+                      >
+                        <option value="">preço de compra bruto</option>
+                        {apresentacoesMp.map((a) => (
+                          <option key={a.id} value={a.id}>{a.nome}</option>
+                        ))}
+                      </select>
+                      {temCozido && (
+                        <button
+                          type="button"
+                          onClick={() => alternarCustoCozido(item.linha_id)}
+                          title="Usar custo por kg cozido (peso já depois de assar/fritar)"
+                          className={`text-xs px-1.5 py-0.5 rounded border flex items-center gap-1 ${
+                            item.usa_custo_cozido
+                              ? "border-brick text-brick bg-brick-soft"
+                              : "border-line text-muted"
+                          }`}
+                        >
+                          <Flame size={11} /> cozido
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {efetivo?.viaRendimento && (
+                    <p className="text-xs text-sage mt-0.5">custo por rendimento ({efetivo.base})</p>
+                  )}
                 </td>
                 <td className="py-2">
                   <input
