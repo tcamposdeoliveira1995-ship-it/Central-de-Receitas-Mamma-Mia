@@ -128,6 +128,7 @@ function ReceitaDetalhe({ receita }) {
   const [papel, setPapel] = useState(receita.papel || "");
   const [modoPreparo, setModoPreparo] = useState(receita.modo_preparo || "");
   const enviandoRef = useRef(false); // trava síncrona contra duplo clique (o state salvandoPdf é assíncrono e não pega cliques rápidos)
+  const adicionandoRef = useRef(new Set()); // trava síncrona contra clique duplo ao adicionar ingrediente/sub-receita
 
   // Resultados de busca combinam Matérias-Primas e outras Receitas (sub-receitas,
   // ex: uma massa ou um recheio usados como ingrediente de outra receita).
@@ -150,13 +151,15 @@ function ReceitaDetalhe({ receita }) {
     setErroPdf("");
     setPapel(receita.papel || "");
     setModoPreparo(receita.modo_preparo || "");
+    adicionandoRef.current = new Set();
   }, [receita.id]);
 
   function adicionarIngrediente(mp) {
-    if (itens.some((i) => i.materia_prima_id === mp.id)) {
+    if (itens.some((i) => i.materia_prima_id === mp.id) || adicionandoRef.current.has(mp.id)) {
       setBusca("");
       return;
     }
+    adicionandoRef.current.add(mp.id);
     const novosItens = [
       ...itens,
       { materia_prima_id: mp.id, nome: mp.nome, quantidade: 1, unidade: mp.unidade, tipo: "materia_prima" },
@@ -167,10 +170,11 @@ function ReceitaDetalhe({ receita }) {
   }
 
   function adicionarSubReceita(subReceita) {
-    if (itens.some((i) => i.materia_prima_id === subReceita.id)) {
+    if (itens.some((i) => i.materia_prima_id === subReceita.id) || adicionandoRef.current.has(subReceita.id)) {
       setBusca("");
       return;
     }
+    adicionandoRef.current.add(subReceita.id);
     if (!subReceita.rendimento?.peso_final) {
       alert(
         `"${subReceita.nome}" ainda não tem o peso final salvo no módulo Rendimento — o CMV dela vai ficar zerado até isso ser preenchido lá.`
@@ -192,6 +196,7 @@ function ReceitaDetalhe({ receita }) {
   }
 
   function removerIngrediente(materiaPrimaId) {
+    adicionandoRef.current.delete(materiaPrimaId);
     const novosItens = itens.filter((i) => i.materia_prima_id !== materiaPrimaId);
     setItens(novosItens);
     atualizarItensReceita(receita.id, novosItens);
@@ -199,6 +204,7 @@ function ReceitaDetalhe({ receita }) {
 
   function limparTodosIngredientes() {
     if (!confirm("Remover todos os ingredientes desta receita? Essa ação não pode ser desfeita.")) return;
+    adicionandoRef.current = new Set();
     setItens([]);
     atualizarItensReceita(receita.id, []);
   }
