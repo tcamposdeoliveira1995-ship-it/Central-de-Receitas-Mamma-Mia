@@ -9,6 +9,20 @@ import { extrairTextoPDF } from "@/lib/pdfText";
 import { parseTextoReceita, encontrarMateriaPrimaPorNome } from "@/lib/parseReceita";
 import { FichaReceitaPDF } from "@/lib/pdfReceita";
 
+// Identificador único por linha de ingrediente — permite a mesma matéria-prima
+// aparecer mais de uma vez na receita (ex: farinha no preparo + farinha pra
+// polvilhar), cada ocorrência com sua própria quantidade/observação.
+function gerarLinhaId() {
+  return `linha-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Itens que vieram da planilha antes dessa mudança não têm linha_id — preenche
+// na hora de carregar, só pra essa sessão (não precisa persistir: a identidade
+// da linha só importa enquanto a tela está aberta).
+function backfillLinhaId(itens) {
+  return itens.map((item) => (item.linha_id ? item : { ...item, linha_id: gerarLinhaId() }));
+}
+
 export default function ReceitasPage() {
   const { receitas, adicionarReceita } = useStore();
   const [selecionadaId, setSelecionadaId] = useState(receitas[0]?.id ?? null);
@@ -118,7 +132,7 @@ function ReceitaDetalhe({ receita }) {
     enviarFichaPdf,
     atualizarDetalhesReceita,
   } = useStore();
-  const [itens, setItens] = useState(receita.itens || []);
+  const [itens, setItens] = useState(() => backfillLinhaId(receita.itens || []));
   const [busca, setBusca] = useState("");
   const [lendoPdf, setLendoPdf] = useState(false);
   const [erroPdf, setErroPdf] = useState("");
@@ -128,7 +142,8 @@ function ReceitaDetalhe({ receita }) {
   const [papel, setPapel] = useState(receita.papel || "");
   const [modoPreparo, setModoPreparo] = useState(receita.modo_preparo || "");
   const enviandoRef = useRef(false); // trava síncrona contra duplo clique (o state salvandoPdf é assíncrono e não pega cliques rápidos)
-  const adicionandoRef = useRef(new Set()); // trava síncrona contra clique duplo ao adicionar ingrediente/sub-receita
+  const adicionandoRef = useRef(new Set()); // trava rápida (400ms) contra clique duplo acidental — não impede adicionar
+  // o mesmo ingrediente de novo depois disso, já que agora é permitido (ex: farinha no preparo + farinha pra polvilhar).
   const itensRef = useRef(itens); // cópia sempre atualizada de `itens` — o state do React só reflete depois de um re-render,
   // e ler `itens` (o state) direto em cliques rápidos pega uma versão desatualizada, fazendo uma adição sobrescrever a
   // anterior em vez de somar. Toda leitura usada pra CALCULAR o próximo valor deve usar itensRef.current, não `itens`.
@@ -149,8 +164,9 @@ function ReceitaDetalhe({ receita }) {
 
   // Sincroniza quando troca de receita selecionada
   useMemo(() => {
-    itensRef.current = receita.itens || [];
-    setItens(receita.itens || []);
+    const comLinhaId = backfillLinhaId(receita.itens || []);
+    itensRef.current = comLinhaId;
+    setItens(comLinhaId);
     setPdfPendente(null);
     setErroPdf("");
     setPapel(receita.papel || "");
@@ -166,46 +182,61 @@ function ReceitaDetalhe({ receita }) {
     atualizarItensReceita(receita.id, novosItens);
   }
 
+  // Trava só o clique duplo acidental (mesmo dedo/mouse, poucos milissegundos de diferença) —
+  // depois de 400ms libera de novo, porque adicionar o mesmo ingrediente uma segunda vez de
+  // propósito (farinha no preparo + farinha pra polvilhar) é uma ação válida.
+  function comTravaRapida(chave, acao) {
+    if (adicionandoRef.current.has(chave)) return;
+    adicionandoRef.current.add(chave);
+    acao();
+    setTimeout(() => adicionandoRef.current.delete(chave), 400);
+  }
+
   function adicionarIngrediente(mp) {
-    const atuais = itensRef.current;
-    if (atuais.some((i) => i.materia_prima_id === mp.id) || adicionandoRef.current.has(mp.id)) {
-      setBusca("");
-      return;
-    }
-    adicionandoRef.current.add(mp.id);
-    commitItens([
-      ...atuais,
-      { materia_prima_id: mp.id, nome: mp.nome, quantidade: 1, unidade: mp.unidade, tipo: "materia_prima" },
-    ]);
+    comTravaRapida(mp.id, () => {
+      commitItens([
+        ...itensRef.current,
+        {
+          linha_id: gerarLinhaId(),
+          materia_prima_id: mp.id,
+          nome: mp.nome,
+          quantidade: 1,
+          unidade: mp.unidade,
+          tipo: "materia_prima",
+        },
+      ]);
+    });
     setBusca("");
   }
 
   function adicionarSubReceita(subReceita) {
-    const atuais = itensRef.current;
-    if (atuais.some((i) => i.materia_prima_id === subReceita.id) || adicionandoRef.current.has(subReceita.id)) {
-      setBusca("");
-      return;
-    }
-    adicionandoRef.current.add(subReceita.id);
-    if (!subReceita.rendimento?.peso_final) {
-      alert(
-        `"${subReceita.nome}" ainda não tem o peso final salvo no módulo Rendimento — o CMV dela vai ficar zerado até isso ser preenchido lá.`
-      );
-    }
-    commitItens([
-      ...atuais,
-      { materia_prima_id: subReceita.id, nome: subReceita.nome, quantidade: 1, unidade: "kg", tipo: "receita" },
-    ]);
+    comTravaRapida(subReceita.id, () => {
+      if (!subReceita.rendimento?.peso_final) {
+        alert(
+          `"${subReceita.nome}" ainda não tem o peso final salvo no módulo Rendimento — o CMV dela vai ficar zerado até isso ser preenchido lá.`
+        );
+      }
+      commitItens([
+        ...itensRef.current,
+        {
+          linha_id: gerarLinhaId(),
+          materia_prima_id: subReceita.id,
+          nome: subReceita.nome,
+          quantidade: 1,
+          unidade: "kg",
+          tipo: "receita",
+        },
+      ]);
+    });
     setBusca("");
   }
 
-  function alterarQuantidade(materiaPrimaId, quantidade) {
-    commitItens(itensRef.current.map((i) => (i.materia_prima_id === materiaPrimaId ? { ...i, quantidade } : i)));
+  function alterarQuantidade(linhaId, quantidade) {
+    commitItens(itensRef.current.map((i) => (i.linha_id === linhaId ? { ...i, quantidade } : i)));
   }
 
-  function removerIngrediente(materiaPrimaId) {
-    adicionandoRef.current.delete(materiaPrimaId);
-    commitItens(itensRef.current.filter((i) => i.materia_prima_id !== materiaPrimaId));
+  function removerIngrediente(linhaId) {
+    commitItens(itensRef.current.filter((i) => i.linha_id !== linhaId));
   }
 
   function limparTodosIngredientes() {
@@ -224,10 +255,8 @@ function ReceitaDetalhe({ receita }) {
     atualizarDetalhesReceita(receita.id, { papel, modo_preparo: modoPreparo });
   }
 
-  function alterarDetalheItemLocal(materiaPrimaId, campo, valor) {
-    const atualizados = itensRef.current.map((i) =>
-      i.materia_prima_id === materiaPrimaId ? { ...i, [campo]: valor } : i
-    );
+  function alterarDetalheItemLocal(linhaId, campo, valor) {
+    const atualizados = itensRef.current.map((i) => (i.linha_id === linhaId ? { ...i, [campo]: valor } : i));
     itensRef.current = atualizados;
     setItens(atualizados);
   }
@@ -345,6 +374,7 @@ function ReceitaDetalhe({ receita }) {
           mpId = nova.id;
         }
         itensParaAdicionar.push({
+          linha_id: gerarLinhaId(),
           materia_prima_id: mpId,
           nome: item.nome,
           quantidade: item.quantidade,
@@ -353,13 +383,10 @@ function ReceitaDetalhe({ receita }) {
         });
       }
 
-      // 2) mescla com os ingredientes que já existiam na receita
-      const mesclados = [...itensRef.current];
-      for (const novo of itensParaAdicionar) {
-        const idx = mesclados.findIndex((i) => i.materia_prima_id === novo.materia_prima_id);
-        if (idx >= 0) mesclados[idx] = novo;
-        else mesclados.push(novo);
-      }
+      // 2) acrescenta aos ingredientes que já existiam na receita (cada item do PDF
+      //    vira uma linha nova — se a mesma matéria-prima já estava na receita, agora
+      //    ambas as linhas convivem, ex: farinha no preparo + farinha pra polvilhar).
+      const mesclados = [...itensRef.current, ...itensParaAdicionar];
       itensRef.current = mesclados;
       setItens(mesclados);
       await atualizarItensReceita(receita.id, mesclados);
@@ -619,7 +646,7 @@ function ReceitaDetalhe({ receita }) {
               : converterQuantidade(item.quantidade, item.unidade, mp?.unidade);
             const valorTotal = quantidadeParaCusto * valorUnitario;
             return (
-              <tr key={item.materia_prima_id} className="border-b border-line last:border-0">
+              <tr key={item.linha_id} className="border-b border-line last:border-0">
                 <td className="py-2">
                   <span className="flex items-center gap-1.5">
                     {ehSubReceita && <Layers size={12} className="text-sage shrink-0" />}
@@ -629,7 +656,7 @@ function ReceitaDetalhe({ receita }) {
                 <td className="py-2">
                   <input
                     value={item.apresentacao || ""}
-                    onChange={(e) => alterarDetalheItemLocal(item.materia_prima_id, "apresentacao", e.target.value)}
+                    onChange={(e) => alterarDetalheItemLocal(item.linha_id, "apresentacao", e.target.value)}
                     onBlur={salvarItensAtual}
                     placeholder="—"
                     className="w-20 px-2 py-1 border border-line rounded-md text-xs"
@@ -638,7 +665,7 @@ function ReceitaDetalhe({ receita }) {
                 <td className="py-2">
                   <input
                     value={item.observacao || ""}
-                    onChange={(e) => alterarDetalheItemLocal(item.materia_prima_id, "observacao", e.target.value)}
+                    onChange={(e) => alterarDetalheItemLocal(item.linha_id, "observacao", e.target.value)}
                     onBlur={salvarItensAtual}
                     placeholder="—"
                     className="w-20 px-2 py-1 border border-line rounded-md text-xs"
@@ -649,7 +676,7 @@ function ReceitaDetalhe({ receita }) {
                     type="number"
                     step="0.01"
                     value={item.quantidade}
-                    onChange={(e) => alterarQuantidade(item.materia_prima_id, parseFloat(e.target.value) || 0)}
+                    onChange={(e) => alterarQuantidade(item.linha_id, parseFloat(e.target.value) || 0)}
                     className="w-20 px-2 py-1 border border-line rounded-md font-mono-num"
                   />
                 </td>
@@ -660,7 +687,7 @@ function ReceitaDetalhe({ receita }) {
                 </td>
                 <td className="py-2 text-right font-mono-num font-medium">{formatBRL(valorTotal)}</td>
                 <td className="py-2 text-right">
-                  <button onClick={() => removerIngrediente(item.materia_prima_id)} className="text-muted hover:text-brick">
+                  <button onClick={() => removerIngrediente(item.linha_id)} className="text-muted hover:text-brick">
                     <X size={14} />
                   </button>
 
