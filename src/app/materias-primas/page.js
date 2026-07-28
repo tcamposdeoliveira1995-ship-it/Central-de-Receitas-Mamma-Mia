@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, Plus, TrendingUp, TrendingDown } from "lucide-react";
+import { Search, Plus, TrendingUp, TrendingDown, ChevronDown, ChevronRight as ChevronRightIcon, Flame } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { formatBRL } from "@/lib/calc";
+import { formatBRL, formatNumber } from "@/lib/calc";
 
 export default function MateriasPrimasPage() {
   const { materiasPrimas, categorias, fornecedores, atualizarPrecoMateriaPrima, adicionarMateriaPrima } = useStore();
@@ -165,6 +165,8 @@ export default function MateriasPrimasPage() {
                   Atualizar aqui recalcula o CMV de todas as receitas que usam este ingrediente.
                 </p>
               </div>
+
+              <ApresentacoesPainel mp={selecionada} />
             </div>
           )}
         </div>
@@ -275,5 +277,206 @@ function Campo({ label, children, className = "" }) {
       {label}
       <div className="mt-1">{children}</div>
     </label>
+  );
+}
+
+// Apresentações são "cortes/formas" de uma matéria-prima (ex: Frango — Peito,
+// Frango — Coxa) e cada uma pode ter um ou mais testes de Rendimento (peso
+// bruto → líquido → cozido), que calculam o custo real por kg útil — já
+// embutindo a perda de limpeza/cocção, em vez do preço de compra bruto.
+function ApresentacoesPainel({ mp }) {
+  const { adicionarApresentacao, adicionarRendimentoMP } = useStore();
+  const [criando, setCriando] = useState(false);
+  const [nomeApr, setNomeApr] = useState("");
+  const [pesoRefApr, setPesoRefApr] = useState("");
+  const [expandidaId, setExpandidaId] = useState(null);
+
+  const apresentacoes = mp.apresentacoes || [];
+
+  async function criarApresentacao() {
+    if (!nomeApr.trim()) return;
+    const nova = await adicionarApresentacao(mp.id, {
+      nome: nomeApr,
+      unidade: "un",
+      peso_referencia: parseFloat(pesoRefApr.replace(",", ".")) || 0,
+      e_padrao: apresentacoes.length === 0,
+    });
+    setNomeApr("");
+    setPesoRefApr("");
+    setCriando(false);
+    setExpandidaId(nova.id);
+  }
+
+  return (
+    <div className="mt-5 pt-4 border-t border-line">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs uppercase tracking-wide text-muted">Apresentações e rendimento</p>
+        <button onClick={() => setCriando((v) => !v)} className="text-xs text-sage hover:underline flex items-center gap-1">
+          <Plus size={12} /> Nova apresentação
+        </button>
+      </div>
+      <p className="text-xs text-muted mb-3">
+        Cadastre cortes/formas (ex: "Peito", "Cubos") e teste o rendimento de limpeza/cocção — o CMV das receitas
+        passa a usar o custo real por kg útil em vez do preço de compra bruto.
+      </p>
+
+      {criando && (
+        <div className="border border-line rounded-md p-3 mb-3 space-y-2">
+          <Campo label="Nome da apresentação">
+            <input
+              value={nomeApr}
+              onChange={(e) => setNomeApr(e.target.value)}
+              placeholder="Ex: Cubos, Peito, Filé"
+              className="w-full px-2 py-1.5 rounded-md border border-line text-sm"
+            />
+          </Campo>
+          <Campo label="Peso de referência por unidade, em kg (opcional — só se essa mp for usada em receitas por 'un')">
+            <input
+              value={pesoRefApr}
+              onChange={(e) => setPesoRefApr(e.target.value)}
+              placeholder="Ex: 0,35"
+              className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
+            />
+          </Campo>
+          <div className="flex gap-2">
+            <button onClick={criarApresentacao} className="text-xs px-3 py-1.5 bg-sage text-white rounded-md hover:opacity-90">
+              Salvar
+            </button>
+            <button onClick={() => setCriando(false)} className="text-xs px-3 py-1.5 border border-line rounded-md">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {apresentacoes.length === 0 && !criando && (
+        <p className="text-xs text-muted italic">Nenhuma apresentação cadastrada ainda.</p>
+      )}
+
+      <div className="space-y-2">
+        {apresentacoes.map((apr) => (
+          <ApresentacaoCard
+            key={apr.id}
+            mp={mp}
+            apresentacao={apr}
+            expandida={expandidaId === apr.id}
+            onToggle={() => setExpandidaId((prev) => (prev === apr.id ? null : apr.id))}
+            onAdicionarRendimento={(dados) => adicionarRendimentoMP(mp.id, { apresentacao_id: apr.id, ...dados })}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ApresentacaoCard({ mp, apresentacao, expandida, onToggle, onAdicionarRendimento }) {
+  const rendimentos = (mp.rendimentos || []).filter((r) => r.apresentacao_id === apresentacao.id);
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [form, setForm] = useState({
+    peso_bruto: "",
+    peso_liquido: "",
+    peso_cozido: "",
+    tipo_coccao: "N/A",
+    preco_compra_kg: mp.preco_atual || 0,
+    e_padrao: rendimentos.length === 0,
+  });
+
+  function set(campo, valor) {
+    setForm((f) => ({ ...f, [campo]: valor }));
+  }
+
+  async function salvar() {
+    const pesoBruto = parseFloat(String(form.peso_bruto).replace(",", "."));
+    const pesoLiquido = parseFloat(String(form.peso_liquido).replace(",", "."));
+    if (!pesoBruto || !pesoLiquido) return;
+    await onAdicionarRendimento({
+      peso_bruto: pesoBruto,
+      peso_liquido: pesoLiquido,
+      peso_cozido: parseFloat(String(form.peso_cozido).replace(",", ".")) || 0,
+      tipo_coccao: form.tipo_coccao,
+      preco_compra_kg: parseFloat(String(form.preco_compra_kg).replace(",", ".")) || 0,
+      e_padrao: form.e_padrao,
+    });
+    setForm({ peso_bruto: "", peso_liquido: "", peso_cozido: "", tipo_coccao: "N/A", preco_compra_kg: mp.preco_atual || 0, e_padrao: false });
+    setMostrarForm(false);
+  }
+
+  return (
+    <div className="border border-line rounded-md overflow-hidden">
+      <button onClick={onToggle} className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gold-soft/20">
+        <span className="flex items-center gap-1.5">
+          {expandida ? <ChevronDown size={14} /> : <ChevronRightIcon size={14} />}
+          {apresentacao.nome}
+          {apresentacao.peso_referencia > 0 && (
+            <span className="text-xs text-muted">({formatNumber(apresentacao.peso_referencia, 3)} kg/un)</span>
+          )}
+        </span>
+        <span className="text-xs text-muted">{rendimentos.length} teste{rendimentos.length !== 1 ? "s" : ""}</span>
+      </button>
+
+      {expandida && (
+        <div className="px-3 pb-3 border-t border-line">
+          {rendimentos.map((r) => (
+            <div key={r.id} className="flex items-center justify-between text-xs py-2 border-b border-line last:border-0">
+              <div className="text-muted">
+                {r.data} · bruto {formatNumber(r.peso_bruto, 2)}kg → líquido {formatNumber(r.peso_liquido, 2)}kg
+                {r.peso_cozido > 0 && <> → cozido {formatNumber(r.peso_cozido, 2)}kg ({r.tipo_coccao})</>}
+                {r.e_padrao && <span className="ml-1.5 text-sage font-medium">· padrão</span>}
+              </div>
+              <div className="text-right font-mono-num">
+                <div>líq. {formatBRL(r.custo_real_kg_liquido)}/kg</div>
+                {r.custo_real_kg_cozido > 0 && (
+                  <div className="text-brick flex items-center gap-1 justify-end">
+                    <Flame size={11} /> cozido {formatBRL(r.custo_real_kg_cozido)}/kg
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {mostrarForm ? (
+            <div className="mt-2 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <Campo label="Peso bruto (kg)">
+                  <input value={form.peso_bruto} onChange={(e) => set("peso_bruto", e.target.value)} className="w-full px-2 py-1 border border-line rounded-md text-sm font-mono-num" />
+                </Campo>
+                <Campo label="Peso líquido/cru (kg)">
+                  <input value={form.peso_liquido} onChange={(e) => set("peso_liquido", e.target.value)} className="w-full px-2 py-1 border border-line rounded-md text-sm font-mono-num" />
+                </Campo>
+                <Campo label="Peso cozido (kg, opcional)">
+                  <input value={form.peso_cozido} onChange={(e) => set("peso_cozido", e.target.value)} className="w-full px-2 py-1 border border-line rounded-md text-sm font-mono-num" />
+                </Campo>
+                <Campo label="Tipo de cocção">
+                  <select value={form.tipo_coccao} onChange={(e) => set("tipo_coccao", e.target.value)} className="w-full px-2 py-1 border border-line rounded-md text-sm">
+                    {["N/A", "assado", "frito", "cozido", "grelhado"].map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </Campo>
+                <Campo label="Preço de compra usado (R$/kg)">
+                  <input value={form.preco_compra_kg} onChange={(e) => set("preco_compra_kg", e.target.value)} className="w-full px-2 py-1 border border-line rounded-md text-sm font-mono-num" />
+                </Campo>
+                <label className="text-xs text-muted flex items-center gap-1.5 mt-4">
+                  <input type="checkbox" checked={form.e_padrao} onChange={(e) => set("e_padrao", e.target.checked)} />
+                  Usar como padrão
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={salvar} className="text-xs px-3 py-1.5 bg-sage text-white rounded-md hover:opacity-90">
+                  Salvar teste
+                </button>
+                <button onClick={() => setMostrarForm(false)} className="text-xs px-3 py-1.5 border border-line rounded-md">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setMostrarForm(true)} className="text-xs text-sage hover:underline mt-2 flex items-center gap-1">
+              <Plus size={12} /> Novo teste de rendimento
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
