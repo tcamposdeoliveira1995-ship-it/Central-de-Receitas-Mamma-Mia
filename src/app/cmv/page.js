@@ -1,20 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { calcularCMV, formatBRL } from "@/lib/calc";
 
-const FILTROS_PAPEL = [
-  { valor: "todas", label: "Todas" },
-  { valor: "massa", label: "Massa" },
-  { valor: "recheio", label: "Recheio" },
-  { valor: "produto_final", label: "Produto Final" },
-  { valor: "outro", label: "Outro / não classificado" },
-];
-
 export default function CMVPage() {
   const { receitas, materiasPrimasById, receitasById } = useStore();
-  const [filtro, setFiltro] = useState("todas");
 
   const linhas = useMemo(
     () =>
@@ -34,12 +25,6 @@ export default function CMVPage() {
     [receitas, materiasPrimasById, receitasById]
   );
 
-  const linhasFiltradas = useMemo(() => {
-    if (filtro === "todas") return linhas;
-    if (filtro === "outro") return linhas.filter((r) => !r.papel || r.papel === "outro");
-    return linhas.filter((r) => r.papel === filtro);
-  }, [linhas, filtro]);
-
   const maiorCusto = linhas[0];
 
   return (
@@ -52,23 +37,8 @@ export default function CMVPage() {
         </p>
       </header>
 
-      <div className="flex flex-wrap gap-2 mb-4">
-        {FILTROS_PAPEL.map((f) => (
-          <button
-            key={f.valor}
-            onClick={() => setFiltro(f.valor)}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-              filtro === f.valor
-                ? "bg-sage text-white border-sage"
-                : "border-line text-muted hover:bg-gold-soft/30"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
       <div className="bg-surface border border-line rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-muted border-b border-line">
@@ -82,18 +52,11 @@ export default function CMVPage() {
             </tr>
           </thead>
           <tbody>
-            {linhasFiltradas.map((r) => {
+            {linhas.map((r) => {
               const percentual = maiorCusto ? (r.cmv.cmvUnitario / maiorCusto.cmv.cmvUnitario) * 100 : 0;
               return (
                 <tr key={r.id} className="border-b border-line last:border-0">
-                  <td className="px-5 py-3">
-                    {r.nome}
-                    {r.papel && (
-                      <span className="ml-2 text-[10px] uppercase tracking-wide text-sage bg-sage-soft px-1.5 py-0.5 rounded-full">
-                        {FILTROS_PAPEL.find((f) => f.valor === r.papel)?.label || r.papel}
-                      </span>
-                    )}
-                  </td>
+                  <td className="px-5 py-3">{r.nome}</td>
                   <td className="px-5 py-3 text-right font-mono-num">{formatBRL(r.cmv.custoIngredientes)}</td>
                   <td className="px-5 py-3 text-right font-mono-num">{formatBRL(r.cmv.custoEmbalagem)}</td>
                   <td className="px-5 py-3 text-right font-mono-num font-medium">{formatBRL(r.cmv.custoTotal)}</td>
@@ -109,17 +72,16 @@ export default function CMVPage() {
                 </tr>
               );
             })}
-            {linhasFiltradas.length === 0 && (
+            {linhas.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-5 py-8 text-center text-muted text-sm">
-                  {linhas.length === 0
-                    ? "Cadastre receitas e ingredientes para ver o CMV."
-                    : "Nenhuma receita com essa classificação ainda."}
+                  Cadastre receitas e ingredientes para ver o CMV.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
