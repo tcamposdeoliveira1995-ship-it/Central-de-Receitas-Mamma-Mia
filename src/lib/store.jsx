@@ -124,6 +124,46 @@ export function StoreProvider({ children }) {
     return item;
   }, []);
 
+  const adicionarApresentacao = useCallback(async (materiaPrimaId, dados) => {
+    if (!isDemoMode) {
+      const criada = await postAction("addApresentacao", { materia_prima_id: materiaPrimaId, ...dados });
+      setMateriasPrimas((prev) =>
+        prev.map((mp) =>
+          mp.id === materiaPrimaId ? { ...mp, apresentacoes: [...(mp.apresentacoes || []), criada] } : mp
+        )
+      );
+      return criada;
+    }
+    const criada = { id: `apr-${Date.now()}`, materia_prima_id: materiaPrimaId, ...dados };
+    setMateriasPrimas((prev) =>
+      prev.map((mp) => (mp.id === materiaPrimaId ? { ...mp, apresentacoes: [...(mp.apresentacoes || []), criada] } : mp))
+    );
+    return criada;
+  }, []);
+
+  const adicionarRendimentoMP = useCallback(async (materiaPrimaId, dados) => {
+    if (!isDemoMode) {
+      const criado = await postAction("addRendimentoMP", dados);
+      setMateriasPrimas((prev) =>
+        prev.map((mp) => (mp.id === materiaPrimaId ? { ...mp, rendimentos: [...(mp.rendimentos || []), criado] } : mp))
+      );
+      return criado;
+    }
+    const custoRealKgLiquido = dados.peso_liquido > 0 ? (dados.preco_compra_kg * dados.peso_bruto) / dados.peso_liquido : 0;
+    const custoRealKgCozido = dados.peso_cozido > 0 ? (dados.preco_compra_kg * dados.peso_bruto) / dados.peso_cozido : 0;
+    const criado = {
+      id: `rmp-${Date.now()}`,
+      data: new Date().toISOString().slice(0, 10),
+      ...dados,
+      custo_real_kg_liquido: custoRealKgLiquido,
+      custo_real_kg_cozido: custoRealKgCozido,
+    };
+    setMateriasPrimas((prev) =>
+      prev.map((mp) => (mp.id === materiaPrimaId ? { ...mp, rendimentos: [...(mp.rendimentos || []), criado] } : mp))
+    );
+    return criado;
+  }, []);
+
   const adicionarReceita = useCallback(async (nova) => {
     if (!isDemoMode) {
       const criada = await postAction("addReceita", nova);
@@ -215,6 +255,8 @@ export function StoreProvider({ children }) {
     producoes,
     atualizarPrecoMateriaPrima,
     adicionarMateriaPrima,
+    adicionarApresentacao,
+    adicionarRendimentoMP,
     adicionarReceita,
     atualizarItensReceita,
     enviarFichaPdf,
