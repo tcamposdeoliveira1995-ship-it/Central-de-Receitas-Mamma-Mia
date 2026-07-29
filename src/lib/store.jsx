@@ -244,6 +244,36 @@ export function StoreProvider({ children }) {
     [enfileirar]
   );
 
+  // Se quantidade_teorica não vier, usa o rendimento cadastrado da receita
+  // (rendimento.quantidade_produzida), pra não precisar digitar de novo toda vez.
+  const adicionarProducao = useCallback(
+    async (dados) => {
+      const receita = receitasById[dados.receita_id];
+      const quantidadeTeorica =
+        dados.quantidade_teorica ?? receita?.rendimento?.quantidade_produzida ?? 0;
+      const payload = { ...dados, quantidade_teorica: quantidadeTeorica };
+
+      if (!isDemoMode) {
+        const criada = await postAction("addProducao", payload);
+        setProducoes((prev) => [...prev, criada]);
+        return criada;
+      }
+
+      const perda =
+        quantidadeTeorica > 0
+          ? ((quantidadeTeorica - dados.quantidade_real) / quantidadeTeorica) * 100
+          : 0;
+      const criada = {
+        id: `prod-${Date.now()}`,
+        ...payload,
+        perda_percentual: perda,
+      };
+      setProducoes((prev) => [...prev, criada]);
+      return criada;
+    },
+    [receitasById]
+  );
+
   const value = {
     loading,
     categorias,
@@ -262,6 +292,7 @@ export function StoreProvider({ children }) {
     enviarFichaPdf,
     atualizarRendimentoReceita,
     atualizarDetalhesReceita,
+    adicionarProducao,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
