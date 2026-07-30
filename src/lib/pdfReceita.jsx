@@ -113,6 +113,7 @@ const styles = StyleSheet.create({
     right: 54,
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "flex-end",
     fontSize: 9,
     color: CORES.muted,
     borderTopWidth: 0.5,
@@ -144,7 +145,7 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
         <Text style={styles.secaoTitulo}>Ingredientes</Text>
         <View style={styles.tabelaHeader}>
           <Text style={[styles.tabelaHeaderCel, styles.celNome]}>Ingrediente</Text>
-          <Text style={[styles.tabelaHeaderCel, styles.celApres]}>Apresentação</Text>
+          <Text style={[styles.tabelaHeaderCel, styles.celApres]}>Apres.</Text>
           <Text style={[styles.tabelaHeaderCel, styles.celObs]}>Obs.</Text>
           <Text style={[styles.tabelaHeaderCel, styles.celQtde]}>Qtde</Text>
           <Text style={[styles.tabelaHeaderCel, styles.celUnid]}>Unid.</Text>
@@ -191,7 +192,10 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
         ) : null}
 
         <View style={styles.rodape} fixed>
-          <Text>Mamma Formula — Ficha de Produção</Text>
+          <View>
+            <Text>Mamma Formula — Ficha de Produção</Text>
+            <Text style={{ marginTop: 2 }}>Elaborado por Thalita C. Oliveira - Qualidade</Text>
+          </View>
           <Text>Gerado em {geradoEm}</Text>
         </View>
       </Page>
