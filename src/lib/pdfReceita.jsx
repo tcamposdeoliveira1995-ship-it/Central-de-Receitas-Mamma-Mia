@@ -122,7 +122,9 @@ const styles = StyleSheet.create({
 
 const LABEL_PAPEL = {
   massa: "Massa",
-  recheio: "Recheio",
+  recheio: "Recheio", // valor legado, de receitas classificadas antes da separação Frio/Quente
+  recheio_frio: "Recheio Frio",
+  recheio_quente: "Recheio Quente",
   produto_final: "Produto Final",
   outro: "Outro",
 };
