@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Plus, Search, X, ChevronRight, Upload, FileText, Check, Loader2, Layers, Download, Flame, Wheat, Snowflake, PackageCheck, Shapes } from "lucide-react";
+import { Plus, Search, X, ChevronRight, Upload, FileText, Check, Loader2, Layers, Download, Flame } from "lucide-react";
 import { pdf } from "@react-pdf/renderer";
 import { useStore } from "@/lib/store";
 import { calcularCMV, custoPorKgReceita, custoEfetivoIngrediente, converterQuantidade, formatBRL, formatNumber } from "@/lib/calc";
 import { extrairTextoPDF } from "@/lib/pdfText";
 import { parseTextoReceita, encontrarMateriaPrimaPorNome } from "@/lib/parseReceita";
 import { FichaReceitaPDF } from "@/lib/pdfReceita";
+import { TIPOS_RECEITA } from "@/lib/tiposReceita";
 
 // Identificador único por linha de ingrediente — permite a mesma matéria-prima
 // aparecer mais de uma vez na receita (ex: farinha no preparo + farinha pra
@@ -22,15 +23,6 @@ function gerarLinhaId() {
 function backfillLinhaId(itens) {
   return itens.map((item) => (item.linha_id ? item : { ...item, linha_id: gerarLinhaId() }));
 }
-
-// Tipos de receita disponíveis como cards de seleção (campo "papel" salvo no backend).
-const TIPOS_RECEITA = [
-  { value: "massa", label: "Massa", icone: Wheat },
-  { value: "recheio_frio", label: "Recheio Frio", icone: Snowflake },
-  { value: "recheio_quente", label: "Recheio Quente", icone: Flame },
-  { value: "produto_final", label: "Produto Final", icone: PackageCheck },
-  { value: "outro", label: "Outro", icone: Shapes },
-];
 
 export default function ReceitasPage() {
   const { receitas, adicionarReceita } = useStore();
