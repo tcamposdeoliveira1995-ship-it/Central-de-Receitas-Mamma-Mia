@@ -2,6 +2,7 @@
 
 import { Document, Page, View, Text, Image, StyleSheet, Font } from "@react-pdf/renderer";
 import { formatBRL, formatNumber } from "@/lib/calc";
+import { LABEL_TIPO_RECEITA } from "@/lib/tiposReceita";
 
 const CORES = {
   gold: "#b8863b",
@@ -120,15 +121,6 @@ const styles = StyleSheet.create({
   },
 });
 
-const LABEL_PAPEL = {
-  massa: "Massa",
-  recheio: "Recheio", // valor legado, de receitas classificadas antes da separação Frio/Quente
-  recheio_frio: "Recheio Frio",
-  recheio_quente: "Recheio Quente",
-  produto_final: "Produto Final",
-  outro: "Outro",
-};
-
 export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeItem, apresentacaoLabel, valorUnitario, unidadePreco, valorTotal }) {
   const geradoEm = new Date().toLocaleDateString("pt-BR");
 
@@ -145,7 +137,7 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
           </View>
           <View style={{ alignItems: "flex-end", gap: 6 }}>
             <Image src="/logo-monograma.png" style={styles.logoPequeno} />
-            {receita.papel ? <Text style={styles.badge}>{LABEL_PAPEL[receita.papel] || receita.papel}</Text> : null}
+            {receita.papel ? <Text style={styles.badge}>{LABEL_TIPO_RECEITA[receita.papel] || receita.papel}</Text> : null}
           </View>
         </View>
 
