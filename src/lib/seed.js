@@ -127,6 +127,9 @@ export const receitas = [
   },
 ];
 
+// Módulo de Rendimento de Cocção — sem dados de exemplo por enquanto.
+export const coccoes = [];
+
 export const producoes = [
   {
     id: "prod-1",
