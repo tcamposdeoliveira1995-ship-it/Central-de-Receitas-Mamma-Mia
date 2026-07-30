@@ -13,6 +13,7 @@ export function StoreProvider({ children }) {
   const [materiasPrimas, setMateriasPrimas] = useState(isDemoMode ? seed.materiasPrimas : []);
   const [receitas, setReceitas] = useState(isDemoMode ? seed.receitas : []);
   const [producoes, setProducoes] = useState(isDemoMode ? seed.producoes : []);
+  const [coccoes, setCoccoes] = useState(isDemoMode ? (seed.coccoes || []) : []);
   const [loading, setLoading] = useState(!isDemoMode);
 
   // Fila de gravação por chave (ex: por receita) — garante que duas chamadas pra
@@ -44,6 +45,7 @@ export function StoreProvider({ children }) {
       if (dados.materiasPrimas) setMateriasPrimas(dados.materiasPrimas);
       if (dados.receitas) setReceitas(dados.receitas);
       if (dados.producoes) setProducoes(dados.producoes);
+      if (dados.coccoes) setCoccoes(dados.coccoes);
       setLoading(false);
     }
 
@@ -274,6 +276,18 @@ export function StoreProvider({ children }) {
     [receitasById]
   );
 
+  const adicionarCoccao = useCallback(async (dados) => {
+    if (!isDemoMode) {
+      const criada = await postAction("addCoccao", dados);
+      setCoccoes((prev) => [...prev, criada]);
+      return criada;
+    }
+
+    const criada = { id: `coccao-${Date.now()}`, ...dados };
+    setCoccoes((prev) => [...prev, criada]);
+    return criada;
+  }, []);
+
   const value = {
     loading,
     categorias,
@@ -283,6 +297,7 @@ export function StoreProvider({ children }) {
     receitas,
     receitasById,
     producoes,
+    coccoes,
     atualizarPrecoMateriaPrima,
     adicionarMateriaPrima,
     adicionarApresentacao,
@@ -293,6 +308,7 @@ export function StoreProvider({ children }) {
     atualizarRendimentoReceita,
     atualizarDetalhesReceita,
     adicionarProducao,
+    adicionarCoccao,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
