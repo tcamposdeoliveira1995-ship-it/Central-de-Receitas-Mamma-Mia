@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Plus, Search, X, ChevronRight, Upload, FileText, Check, Loader2, Layers, Download, Flame } from "lucide-react";
+import { Plus, Search, X, ChevronRight, Upload, FileText, Check, Loader2, Layers, Download, Flame, Wheat, Snowflake, PackageCheck, Shapes } from "lucide-react";
 import { pdf } from "@react-pdf/renderer";
 import { useStore } from "@/lib/store";
 import { calcularCMV, custoPorKgReceita, custoEfetivoIngrediente, converterQuantidade, formatBRL, formatNumber } from "@/lib/calc";
@@ -23,6 +23,15 @@ function backfillLinhaId(itens) {
   return itens.map((item) => (item.linha_id ? item : { ...item, linha_id: gerarLinhaId() }));
 }
 
+// Tipos de receita disponíveis como cards de seleção (campo "papel" salvo no backend).
+const TIPOS_RECEITA = [
+  { value: "massa", label: "Massa", icone: Wheat },
+  { value: "recheio_frio", label: "Recheio Frio", icone: Snowflake },
+  { value: "recheio_quente", label: "Recheio Quente", icone: Flame },
+  { value: "produto_final", label: "Produto Final", icone: PackageCheck },
+  { value: "outro", label: "Outro", icone: Shapes },
+];
+
 export default function ReceitasPage() {
   const { receitas, adicionarReceita } = useStore();
   const [selecionadaId, setSelecionadaId] = useState(receitas[0]?.id ?? null);
@@ -31,6 +40,12 @@ export default function ReceitasPage() {
   const [empresaNova, setEmpresaNova] = useState("YUKA Alimentos");
 
   const selecionada = receitas.find((r) => r.id === selecionadaId);
+
+  // Listagem principal sempre em ordem alfabética pelo nome da receita.
+  const receitasOrdenadas = useMemo(
+    () => [...receitas].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" })),
+    [receitas]
+  );
 
   async function criarReceita() {
     if (!nomeNova.trim()) return;
@@ -87,7 +102,7 @@ export default function ReceitasPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="bg-surface border border-line rounded-lg overflow-hidden">
           <ul>
-            {receitas.map((r) => (
+            {receitasOrdenadas.map((r) => (
               <li key={r.id}>
                 <button
                   onClick={() => setSelecionadaId(r.id)}
@@ -440,17 +455,6 @@ function ReceitaDetalhe({ receita }) {
           <p className="text-sm text-muted mt-0.5">{receita.empresa}</p>
         </div>
         <div className="flex items-center gap-2">
-          <select
-            value={papel}
-            onChange={(e) => alterarPapel(e.target.value)}
-            className="text-xs px-2.5 py-1.5 rounded-md border border-line bg-surface"
-          >
-            <option value="">Papel da receita...</option>
-            <option value="massa">Massa</option>
-            <option value="recheio">Recheio</option>
-            <option value="produto_final">Produto Final</option>
-            <option value="outro">Outro</option>
-          </select>
           <button
             onClick={baixarPdf}
             disabled={gerandoPdf}
@@ -459,6 +463,30 @@ function ReceitaDetalhe({ receita }) {
             {gerandoPdf ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
             Baixar PDF
           </button>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <p className="text-xs uppercase tracking-wide text-muted mb-1.5">Tipo da receita</p>
+        <div className="flex flex-wrap gap-2">
+          {TIPOS_RECEITA.map((tipo) => {
+            const selecionado = papel === tipo.value;
+            return (
+              <button
+                key={tipo.value}
+                type="button"
+                onClick={() => alterarPapel(selecionado ? "" : tipo.value)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                  selecionado
+                    ? "border-sage bg-sage-soft text-sage"
+                    : "border-line text-muted hover:bg-gold-soft/30"
+                }`}
+              >
+                <tipo.icone size={14} className={selecionado ? "text-sage" : "text-muted"} />
+                {tipo.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
