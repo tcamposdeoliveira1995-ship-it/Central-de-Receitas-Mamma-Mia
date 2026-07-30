@@ -3,12 +3,39 @@
 import { useState } from "react";
 import { Plus, X, Loader2 } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { formatNumber } from "@/lib/calc";
+import { formatNumber, formatBRL } from "@/lib/calc";
 
 // Identificador local só pra chave do React nas linhas de ingrediente
 // adicionado durante a cocção — não precisa persistir.
 function gerarLinhaId() {
   return `ing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// "dentro" (verde) dentro da faixa; "atencao" (amarelo) perto da faixa (até
+// 15% da largura da faixa fora dela); "fora" (vermelho) além disso.
+// Retorna null se a meta não foi preenchida (sem faixa pra comparar).
+function classificarMeta(valor, min, max) {
+  if (min === "" || max === "" || min === null || max === null) return null;
+  if (valor >= min && valor <= max) return "dentro";
+  const margem = (max - min) * 0.15;
+  if (valor >= min - margem && valor <= max + margem) return "atencao";
+  return "fora";
+}
+
+const CORES_STATUS = {
+  dentro: { texto: "text-sage", fundo: "bg-sage-soft", label: "Dentro da meta" },
+  atencao: { texto: "text-gold", fundo: "bg-gold-soft", label: "Atenção" },
+  fora: { texto: "text-brick", fundo: "bg-brick-soft", label: "Fora da meta" },
+};
+
+function BarraProgresso({ percentual, status }) {
+  const cor = status === "dentro" ? "bg-sage" : status === "fora" ? "bg-brick" : status === "atencao" ? "bg-gold" : "bg-muted";
+  const largura = Math.max(0, Math.min(100, percentual));
+  return (
+    <div className="w-full h-2 bg-line rounded-full overflow-hidden mt-2">
+      <div className={`h-full ${cor}`} style={{ width: `${largura}%` }} />
+    </div>
+  );
 }
 
 export default function RendimentoCoccaoPage() {
@@ -25,7 +52,7 @@ export default function RendimentoCoccaoPage() {
           <p className="text-xs uppercase tracking-widest text-gold font-medium">Módulo 11</p>
           <h1 className="font-display text-3xl mt-1">Rendimento de Cocção</h1>
           <p className="text-sm text-muted mt-1">
-            Peso antes e depois da cocção, com cálculo automático de rendimento e perda por lote.
+            Peso antes e depois da cocção, com cálculo automático de rendimento, perda e custo por lote.
           </p>
         </div>
         <button
@@ -57,8 +84,9 @@ export default function RendimentoCoccaoPage() {
                 <th className="px-5 py-3 font-medium">Lote</th>
                 <th className="px-5 py-3 font-medium text-right">Peso cru</th>
                 <th className="px-5 py-3 font-medium text-right">Peso cozido</th>
-                <th className="px-5 py-3 font-medium text-right">Rendimento</th>
+                <th className="px-5 py-3 font-medium text-right">Rend. proteína</th>
                 <th className="px-5 py-3 font-medium text-right">Perda</th>
+                <th className="px-5 py-3 font-medium text-right">Custo da perda</th>
               </tr>
             </thead>
             <tbody>
@@ -75,11 +103,14 @@ export default function RendimentoCoccaoPage() {
                   <td className="px-5 py-3 text-right font-mono-num font-medium text-brick">
                     {formatNumber(c.perda_carne_kg, 3)} kg
                   </td>
+                  <td className="px-5 py-3 text-right font-mono-num text-muted">
+                    {c.custo_perda_proteina > 0 ? formatBRL(c.custo_perda_proteina) : "—"}
+                  </td>
                 </tr>
               ))}
               {ordenadas.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-8 text-center text-muted text-sm">
+                  <td colSpan={8} className="px-5 py-8 text-center text-muted text-sm">
                     Nenhuma cocção registrada ainda.
                   </td>
                 </tr>
@@ -93,6 +124,7 @@ export default function RendimentoCoccaoPage() {
 }
 
 function NovaCoccaoForm({ receitas, onSalvar, onCancelar }) {
+  const { materiasPrimasById } = useStore();
   const [receitaId, setReceitaId] = useState(receitas[0]?.id || "");
   const [data, setData] = useState(new Date().toISOString().slice(0, 10));
   const [unidadeSetor, setUnidadeSetor] = useState("");
@@ -108,7 +140,21 @@ function NovaCoccaoForm({ receitas, onSalvar, onCancelar }) {
 
   const [ingredientes, setIngredientes] = useState([]);
 
+  const [metaProteinaMin, setMetaProteinaMin] = useState("");
+  const [metaProteinaMax, setMetaProteinaMax] = useState("");
+  const [metaPreparacaoMin, setMetaPreparacaoMin] = useState("");
+  const [metaPreparacaoMax, setMetaPreparacaoMax] = useState("");
+
+  const [materiaPrimaCustoId, setMateriaPrimaCustoId] = useState("");
+
+  const [horaInicio, setHoraInicio] = useState("");
+  const [horaFim, setHoraFim] = useState("");
+  const [temperaturaMedia, setTemperaturaMedia] = useState("");
+
   const [salvando, setSalvando] = useState(false);
+
+  const receita = receitas.find((r) => r.id === receitaId);
+  const ingredientesDaReceita = (receita?.itens || []).filter((i) => i.tipo !== "receita");
 
   function num(v) {
     const n = parseFloat(String(v).replace(",", "."));
@@ -127,6 +173,21 @@ function NovaCoccaoForm({ receitas, onSalvar, onCancelar }) {
   const rendimentoPreparacao = pesoTotalAntes > 0 ? (pesoLiquidoCozido / pesoTotalAntes) * 100 : 0;
   const perdaPreparacaoKg = pesoTotalAntes - pesoLiquidoCozido;
   const perdaPreparacaoPercentual = pesoTotalAntes > 0 ? (perdaPreparacaoKg / pesoTotalAntes) * 100 : 0;
+
+  const statusProteina = classificarMeta(rendimentoCarne, metaProteinaMin === "" ? "" : num(metaProteinaMin), metaProteinaMax === "" ? "" : num(metaProteinaMax));
+  const statusPreparacao = classificarMeta(rendimentoPreparacao, metaPreparacaoMin === "" ? "" : num(metaPreparacaoMin), metaPreparacaoMax === "" ? "" : num(metaPreparacaoMax));
+
+  const mpCusto = materiaPrimaCustoId ? materiasPrimasById[materiaPrimaCustoId] : null;
+  const custoKgProteina = mpCusto?.preco_atual || 0;
+  const custoPerdaProteina = perdaCarneKg > 0 ? perdaCarneKg * custoKgProteina : 0;
+
+  let tempoTotalMinutos = 0;
+  if (horaInicio && horaFim) {
+    const [h1, m1] = horaInicio.split(":").map(Number);
+    const [h2, m2] = horaFim.split(":").map(Number);
+    tempoTotalMinutos = h2 * 60 + m2 - (h1 * 60 + m1);
+    if (tempoTotalMinutos < 0) tempoTotalMinutos += 24 * 60; // cocção que passou da meia-noite
+  }
 
   function adicionarLinhaIngrediente() {
     setIngredientes((prev) => [...prev, { linha_id: gerarLinhaId(), nome: "", peso: "" }]);
@@ -168,6 +229,17 @@ function NovaCoccaoForm({ receitas, onSalvar, onCancelar }) {
         rendimento_preparacao_percentual: rendimentoPreparacao,
         perda_preparacao_kg: perdaPreparacaoKg,
         perda_preparacao_percentual: perdaPreparacaoPercentual,
+        meta_proteina_min: metaProteinaMin === "" ? null : num(metaProteinaMin),
+        meta_proteina_max: metaProteinaMax === "" ? null : num(metaProteinaMax),
+        meta_preparacao_min: metaPreparacaoMin === "" ? null : num(metaPreparacaoMin),
+        meta_preparacao_max: metaPreparacaoMax === "" ? null : num(metaPreparacaoMax),
+        materia_prima_custo_id: materiaPrimaCustoId || null,
+        custo_kg_proteina: custoKgProteina,
+        custo_perda_proteina: custoPerdaProteina,
+        hora_inicio: horaInicio,
+        hora_fim: horaFim,
+        tempo_total_minutos: tempoTotalMinutos,
+        temperatura_media: temperaturaMedia === "" ? null : num(temperaturaMedia),
       });
     } finally {
       setSalvando(false);
@@ -236,6 +308,40 @@ function NovaCoccaoForm({ receitas, onSalvar, onCancelar }) {
         </Campo>
       </div>
 
+      {/* Tempo e temperatura */}
+      <p className="text-xs uppercase tracking-wide text-muted mt-5 mb-2">Tempo e temperatura</p>
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <Campo label="Início">
+          <input
+            type="time"
+            value={horaInicio}
+            onChange={(e) => setHoraInicio(e.target.value)}
+            className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
+          />
+        </Campo>
+        <Campo label="Fim">
+          <input
+            type="time"
+            value={horaFim}
+            onChange={(e) => setHoraFim(e.target.value)}
+            className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
+          />
+        </Campo>
+        <Campo label="Tempo total (calculado)">
+          <div className="px-2 py-1.5 rounded-md bg-gold-soft/40 text-sm font-mono-num font-medium">
+            {horaInicio && horaFim ? `${tempoTotalMinutos} min` : "—"}
+          </div>
+        </Campo>
+        <Campo label="Temperatura média da panela (°C)">
+          <input
+            value={temperaturaMedia}
+            onChange={(e) => setTemperaturaMedia(e.target.value)}
+            placeholder="Ex: 92"
+            className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
+          />
+        </Campo>
+      </div>
+
       {/* 2. Pesagem antes da cocção */}
       <p className="text-xs uppercase tracking-wide text-muted mt-5 mb-2">Pesagem antes da cocção</p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -292,9 +398,11 @@ function NovaCoccaoForm({ receitas, onSalvar, onCancelar }) {
           <Plus size={12} /> Adicionar ingrediente
         </button>
         {ingredientes.length > 0 && (
-          <p className="text-xs text-muted pt-1">
-            Total antes da cocção (carne + ingredientes): <span className="font-mono-num font-medium">{formatNumber(pesoTotalAntes, 3)} kg</span>
-          </p>
+          <div className="text-xs text-muted pt-1 space-y-0.5">
+            <p>Proteína: <span className="font-mono-num font-medium">{formatNumber(pesoLiquidoCru, 3)} kg</span></p>
+            <p>Ingredientes: <span className="font-mono-num font-medium">{formatNumber(somaIngredientes, 3)} kg</span></p>
+            <p>Peso total da preparação: <span className="font-mono-num font-medium">{formatNumber(pesoTotalAntes, 3)} kg</span></p>
+          </div>
         )}
       </div>
 
@@ -324,25 +432,76 @@ function NovaCoccaoForm({ receitas, onSalvar, onCancelar }) {
         </Campo>
       </div>
 
+      {/* Meta de rendimento */}
+      <p className="text-xs uppercase tracking-wide text-muted mt-5 mb-2">🎯 Meta de rendimento (opcional, pra esse lote)</p>
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <Campo label="Proteína — mínimo %">
+          <input value={metaProteinaMin} onChange={(e) => setMetaProteinaMin(e.target.value)} placeholder="Ex: 93" className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num" />
+        </Campo>
+        <Campo label="Proteína — máximo %">
+          <input value={metaProteinaMax} onChange={(e) => setMetaProteinaMax(e.target.value)} placeholder="Ex: 96" className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num" />
+        </Campo>
+        <Campo label="Preparação — mínimo %">
+          <input value={metaPreparacaoMin} onChange={(e) => setMetaPreparacaoMin(e.target.value)} placeholder="Ex: 60" className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num" />
+        </Campo>
+        <Campo label="Preparação — máximo %">
+          <input value={metaPreparacaoMax} onChange={(e) => setMetaPreparacaoMax(e.target.value)} placeholder="Ex: 65" className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num" />
+        </Campo>
+      </div>
+
+      {/* Custo da perda */}
+      <p className="text-xs uppercase tracking-wide text-muted mt-5 mb-2">💰 Custo da perda (opcional)</p>
+      <Campo label="Matéria-prima usada como referência de preço" className="sm:max-w-sm">
+        <select
+          value={materiaPrimaCustoId}
+          onChange={(e) => setMateriaPrimaCustoId(e.target.value)}
+          className="w-full px-2 py-1.5 rounded-md border border-line text-sm"
+        >
+          <option value="">Não calcular custo</option>
+          {ingredientesDaReceita.map((i) => (
+            <option key={i.materia_prima_id} value={i.materia_prima_id}>{i.nome}</option>
+          ))}
+        </select>
+      </Campo>
+
       {/* 5. Indicadores automáticos */}
       <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="bg-sage-soft/40 rounded-lg p-4">
-          <p className="text-xs uppercase tracking-wide text-muted mb-2">Rendimento da carne (sem ingredientes)</p>
-          <div className="flex items-baseline gap-3 flex-wrap">
+        <div className={`rounded-lg p-4 ${statusProteina ? CORES_STATUS[statusProteina].fundo : "bg-sage-soft/40"}`}>
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-wide text-muted">🟢 Rendimento da Proteína</p>
+            {statusProteina && (
+              <span className={`text-xs font-medium ${CORES_STATUS[statusProteina].texto}`}>
+                {CORES_STATUS[statusProteina].label}
+              </span>
+            )}
+          </div>
+          <div className="flex items-baseline gap-3 flex-wrap mt-1">
             <span className="font-display text-xl text-sage">{formatNumber(rendimentoCarne, 1)}%</span>
             <span className="text-xs text-muted">
               perda: {formatNumber(perdaCarneKg, 3)} kg ({formatNumber(perdaCarnePercentual, 1)}%)
             </span>
           </div>
+          {custoPerdaProteina > 0 && (
+            <p className="text-xs text-brick mt-1">💰 custo da perda: {formatBRL(custoPerdaProteina)}</p>
+          )}
+          <BarraProgresso percentual={rendimentoCarne} status={statusProteina} />
         </div>
-        <div className="bg-gold-soft/40 rounded-lg p-4">
-          <p className="text-xs uppercase tracking-wide text-muted mb-2">Rendimento da preparação completa</p>
-          <div className="flex items-baseline gap-3 flex-wrap">
-            <span className="font-display text-xl text-foreground">{formatNumber(rendimentoPreparacao, 1)}%</span>
-            <span className="text-xs text-muted">
-              perda: {formatNumber(perdaPreparacaoKg, 3)} kg ({formatNumber(perdaPreparacaoPercentual, 1)}%)
-            </span>
+        <div className={`rounded-lg p-4 ${statusPreparacao ? CORES_STATUS[statusPreparacao].fundo : "bg-gold-soft/40"}`}>
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-wide text-muted">🟡 Rendimento da Preparação</p>
+            {statusPreparacao && (
+              <span className={`text-xs font-medium ${CORES_STATUS[statusPreparacao].texto}`}>
+                {CORES_STATUS[statusPreparacao].label}
+              </span>
+            )}
           </div>
+          <div className="flex items-baseline gap-3 flex-wrap mt-1">
+            <span className="font-display text-xl text-foreground">{formatNumber(rendimentoPreparacao, 1)}%</span>
+          </div>
+          <p className="text-xs text-muted mt-1">
+            peso inicial: {formatNumber(pesoTotalAntes, 3)} kg · peso final: {formatNumber(pesoLiquidoCozido, 3)} kg · perda total: {formatNumber(perdaPreparacaoKg, 3)} kg
+          </p>
+          <BarraProgresso percentual={rendimentoPreparacao} status={statusPreparacao} />
         </div>
       </div>
 
