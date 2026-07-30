@@ -30,13 +30,18 @@ export default function ReceitasPage() {
   const [criando, setCriando] = useState(false);
   const [nomeNova, setNomeNova] = useState("");
   const [empresaNova, setEmpresaNova] = useState("YUKA Alimentos");
+  const [tipoFiltro, setTipoFiltro] = useState(""); // "" = todos os tipos
 
   const selecionada = receitas.find((r) => r.id === selecionadaId);
 
-  // Listagem principal sempre em ordem alfabética pelo nome da receita.
+  // Listagem principal sempre em ordem alfabética pelo nome da receita,
+  // e filtrada pelo tipo escolhido nos cards (Massa/Recheio Frio/.../Outro).
   const receitasOrdenadas = useMemo(
-    () => [...receitas].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" })),
-    [receitas]
+    () =>
+      [...receitas]
+        .filter((r) => !tipoFiltro || r.papel === tipoFiltro)
+        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" })),
+    [receitas, tipoFiltro]
   );
 
   async function criarReceita() {
@@ -91,6 +96,39 @@ export default function ReceitasPage() {
         </div>
       )}
 
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <span className="text-xs uppercase tracking-wide text-muted mr-1">Tipo:</span>
+        <button
+          type="button"
+          onClick={() => setTipoFiltro("")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+            tipoFiltro === ""
+              ? "border-sage bg-sage-soft text-sage"
+              : "border-line text-muted hover:bg-gold-soft/30"
+          }`}
+        >
+          Todos
+        </button>
+        {TIPOS_RECEITA.map((tipo) => {
+          const selecionado = tipoFiltro === tipo.value;
+          return (
+            <button
+              key={tipo.value}
+              type="button"
+              onClick={() => setTipoFiltro(selecionado ? "" : tipo.value)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                selecionado
+                  ? "border-sage bg-sage-soft text-sage"
+                  : "border-line text-muted hover:bg-gold-soft/30"
+              }`}
+            >
+              <tipo.icone size={14} className={selecionado ? "text-sage" : "text-muted"} />
+              {tipo.label}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="bg-surface border border-line rounded-lg overflow-hidden">
           <ul>
@@ -110,7 +148,11 @@ export default function ReceitasPage() {
                 </button>
               </li>
             ))}
-            {receitas.length === 0 && <li className="px-4 py-8 text-center text-sm text-muted">Nenhuma receita cadastrada.</li>}
+            {receitasOrdenadas.length === 0 && (
+              <li className="px-4 py-8 text-center text-sm text-muted">
+                {tipoFiltro ? "Nenhuma receita desse tipo ainda." : "Nenhuma receita cadastrada."}
+              </li>
+            )}
           </ul>
         </div>
 
