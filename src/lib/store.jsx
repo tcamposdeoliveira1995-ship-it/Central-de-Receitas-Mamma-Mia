@@ -14,7 +14,7 @@ export function StoreProvider({ children }) {
   const [receitas, setReceitas] = useState(isDemoMode ? seed.receitas : []);
   const [producoes, setProducoes] = useState(isDemoMode ? seed.producoes : []);
   const [coccoes, setCoccoes] = useState(isDemoMode ? (seed.coccoes || []) : []);
-  const [embutidosRecheio, setEmbutidosRecheio] = useState(isDemoMode ? (seed.embutidosRecheio || []) : []);
+  const [recheiosFrios, setRecheiosFrios] = useState(isDemoMode ? (seed.recheiosFrios || []) : []);
   const [loading, setLoading] = useState(!isDemoMode);
 
   // Fila de gravação por chave (ex: por receita) — garante que duas chamadas pra
@@ -47,7 +47,7 @@ export function StoreProvider({ children }) {
       if (dados.receitas) setReceitas(dados.receitas);
       if (dados.producoes) setProducoes(dados.producoes);
       if (dados.coccoes) setCoccoes(dados.coccoes);
-      if (dados.embutidosRecheio) setEmbutidosRecheio(dados.embutidosRecheio);
+      if (dados.recheiosFrios) setRecheiosFrios(dados.recheiosFrios);
       setLoading(false);
     }
 
@@ -290,15 +290,15 @@ export function StoreProvider({ children }) {
     return criada;
   }, []);
 
-  const adicionarEmbutidoRecheio = useCallback(async (dados) => {
+  const adicionarRecheioFrio = useCallback(async (dados) => {
     if (!isDemoMode) {
-      const criada = await postAction("addEmbutidoRecheio", dados);
-      setEmbutidosRecheio((prev) => [...prev, criada]);
+      const criada = await postAction("addRecheioFrio", dados);
+      setRecheiosFrios((prev) => [...prev, criada]);
       return criada;
     }
 
-    const criada = { id: `embutido-${Date.now()}`, ...dados };
-    setEmbutidosRecheio((prev) => [...prev, criada]);
+    const criada = { id: `recheio-${Date.now()}`, ...dados };
+    setRecheiosFrios((prev) => [...prev, criada]);
     return criada;
   }, []);
 
@@ -312,7 +312,7 @@ export function StoreProvider({ children }) {
     receitasById,
     producoes,
     coccoes,
-    embutidosRecheio,
+    recheiosFrios,
     atualizarPrecoMateriaPrima,
     adicionarMateriaPrima,
     adicionarApresentacao,
@@ -324,7 +324,7 @@ export function StoreProvider({ children }) {
     atualizarDetalhesReceita,
     adicionarProducao,
     adicionarCoccao,
-    adicionarEmbutidoRecheio,
+    adicionarRecheioFrio,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
