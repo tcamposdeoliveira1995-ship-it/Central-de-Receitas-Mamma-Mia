@@ -50,6 +50,7 @@ export default function ProducoesPage() {
               <th className="px-5 py-3 font-medium">Lote</th>
               <th className="px-5 py-3 font-medium text-right">Teórico</th>
               <th className="px-5 py-3 font-medium text-right">Real</th>
+              <th className="px-5 py-3 font-medium text-right">Peso (kg)</th>
               <th className="px-5 py-3 font-medium text-right">Diferença</th>
               <th className="px-5 py-3 font-medium text-right">Perda</th>
             </tr>
@@ -66,6 +67,9 @@ export default function ProducoesPage() {
                   <td className="px-5 py-3 font-mono-num text-muted">{p.lote}</td>
                   <td className="px-5 py-3 text-right font-mono-num">{formatNumber(p.quantidade_teorica, 0)}</td>
                   <td className="px-5 py-3 text-right font-mono-num">{formatNumber(p.quantidade_real, 0)}</td>
+                  <td className="px-5 py-3 text-right font-mono-num text-muted">
+                    {p.peso_massa_real ? `${formatNumber(p.peso_massa_real, 3)} kg` : "—"}
+                  </td>
                   <td className={`px-5 py-3 text-right font-mono-num font-medium ${positivo ? "text-sage" : "text-brick"}`}>
                     {positivo ? "+" : ""}{formatNumber(diff, 0)}
                   </td>
@@ -77,7 +81,7 @@ export default function ProducoesPage() {
             })}
             {ordenadas.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-muted text-sm">
+                <td colSpan={8} className="px-5 py-8 text-center text-muted text-sm">
                   Nenhuma produção registrada ainda.
                 </td>
               </tr>
@@ -97,9 +101,23 @@ function NovaProducaoForm({ receitas, onSalvar, onCancelar }) {
   const [quantidadeReal, setQuantidadeReal] = useState("");
   const [sobrescreverTeorica, setSobrescreverTeorica] = useState(false);
   const [quantidadeTeorica, setQuantidadeTeorica] = useState("");
+  const [pesoUnitario, setPesoUnitario] = useState(() => receitas[0]?.peso_unitario || "");
 
   const receita = receitas.find((r) => r.id === receitaId);
   const teoricaDaReceita = receita?.rendimento?.quantidade_produzida || 0;
+
+  function num(v) {
+    const n = parseFloat(String(v).replace(",", "."));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function selecionarReceita(id) {
+    setReceitaId(id);
+    const r = receitas.find((rr) => rr.id === id);
+    setPesoUnitario(r?.peso_unitario || "");
+  }
+
+  const pesoMassaReal = num(quantidadeReal) * num(pesoUnitario);
 
   async function salvar() {
     const real = parseFloat(String(quantidadeReal).replace(",", "."));
@@ -110,6 +128,8 @@ function NovaProducaoForm({ receitas, onSalvar, onCancelar }) {
       data,
       lote,
       quantidade_real: real,
+      peso_unitario_kg: num(pesoUnitario),
+      peso_massa_real: pesoMassaReal,
     };
     if (sobrescreverTeorica && quantidadeTeorica !== "") {
       dados.quantidade_teorica = parseFloat(String(quantidadeTeorica).replace(",", "."));
@@ -124,7 +144,7 @@ function NovaProducaoForm({ receitas, onSalvar, onCancelar }) {
         <Campo label="Receita">
           <select
             value={receitaId}
-            onChange={(e) => setReceitaId(e.target.value)}
+            onChange={(e) => selecionarReceita(e.target.value)}
             className="w-full px-2 py-1.5 rounded-md border border-line text-sm"
           >
             {receitas.map((r) => (
@@ -156,6 +176,24 @@ function NovaProducaoForm({ receitas, onSalvar, onCancelar }) {
             className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
           />
         </Campo>
+        <Campo label="Peso unitário (kg por salgado)">
+          <input
+            value={pesoUnitario}
+            onChange={(e) => setPesoUnitario(e.target.value)}
+            placeholder="Ex: 0,030"
+            className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
+          />
+        </Campo>
+      </div>
+
+      <div className="mt-3">
+        <p className="text-xs text-muted">
+          Peso unitário pré-preenchido a partir do cadastro da receita — pode ajustar livremente pra esse lote.
+        </p>
+        <div className="mt-2 bg-gold-soft/40 rounded-md px-3 py-2 inline-block">
+          <span className="text-xs text-muted mr-2">Peso em massa desse lote:</span>
+          <span className="font-mono-num font-medium text-sage">{formatNumber(pesoMassaReal, 3)} kg</span>
+        </div>
       </div>
 
       <div className="mt-3 pt-3 border-t border-line">
