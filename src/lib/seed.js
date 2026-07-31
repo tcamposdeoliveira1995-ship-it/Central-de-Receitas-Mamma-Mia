@@ -131,7 +131,7 @@ export const receitas = [
 export const coccoes = [];
 
 // Módulo de Recheio Frio (embutidos) — sem dados de exemplo por enquanto.
-export const embutidosRecheio = [];
+export const recheiosFrios = [];
 
 export const producoes = [
   {
