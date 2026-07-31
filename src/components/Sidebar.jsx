@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Beef, BookOpen, Calculator, Percent, Factory, Flame, Menu, X } from "lucide-react";
+import { LayoutGrid, Beef, BookOpen, Calculator, Percent, Factory, Flame, Snowflake, Menu, X } from "lucide-react";
 import { isDemoMode } from "@/lib/sheetsClient";
 
 const links = [
@@ -13,6 +13,7 @@ const links = [
   { href: "/cmv", label: "CMV", icon: Calculator },
   { href: "/rendimento", label: "Rendimento", icon: Percent },
   { href: "/rendimento-coccao", label: "Rendimento de Cocção", icon: Flame },
+  { href: "/recheio-frio", label: "Recheio Frio — Embutidos", icon: Snowflake },
   { href: "/producoes", label: "Produções", icon: Factory },
 ];
 
