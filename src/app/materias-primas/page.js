@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, Plus, TrendingUp, TrendingDown, ChevronDown, ChevronRight as ChevronRightIcon, Flame } from "lucide-react";
+import { Search, Plus, TrendingUp, TrendingDown, ChevronDown, ChevronRight as ChevronRightIcon, Flame, ClipboardList, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { formatBRL, formatNumber } from "@/lib/calc";
 
@@ -167,6 +167,7 @@ export default function MateriasPrimasPage() {
               </div>
 
               <ApresentacoesPainel mp={selecionada} />
+              <NutricionalMateriaPrima mp={selecionada} fornecedores={fornecedores} />
             </div>
           )}
         </div>
@@ -477,6 +478,238 @@ function ApresentacaoCard({ mp, apresentacao, expandida, onToggle, onAdicionarRe
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── NUTRICIONAL DO FORNECEDOR ──────────────────────────────────────
+// Guarda a tabela nutricional exata do rótulo/ficha do fornecedor pra essa
+// matéria-prima (ex: presunto fatiado, mussarela ralada comprados prontos),
+// separada da nutricional dos Produtos/SKUs (que é o produto final da Mamma
+// Mia, calculado a partir da receita).
+
+function linhasNutricionaisPadraoMP() {
+  return [
+    "Valor energético (kcal)",
+    "Carboidratos (g)",
+    "Açúcares totais (g)",
+    "Açúcares adicionados (g)",
+    "Proteínas (g)",
+    "Gorduras totais (g)",
+    "Gorduras saturadas (g)",
+    "Gorduras trans (g)",
+    "Fibra alimentar (g)",
+    "Sódio (mg)",
+  ].map((nutriente) => ({ nutriente, qtd_comparativa: "", porcao: "", vd_percentual: "" }));
+}
+
+function NutricionalMateriaPrima({ mp, fornecedores }) {
+  const { salvarNutricionalMateriaPrima } = useStore();
+  const nutricional = mp.nutricional;
+  const [editando, setEditando] = useState(false);
+  const [fornecedorId, setFornecedorId] = useState(nutricional?.fornecedor_id || mp.fornecedor_principal_id || "");
+  const [ingredientesTexto, setIngredientesTexto] = useState(nutricional?.ingredientes_texto || "");
+  const [alergicosTexto, setAlergicosTexto] = useState(nutricional?.alergicos_texto || "");
+  const [porcaoReferencia, setPorcaoReferencia] = useState(nutricional?.porcao_referencia_gramas || "");
+  const [tabela, setTabela] = useState(() =>
+    mp.tabela_nutricional?.length ? mp.tabela_nutricional : linhasNutricionaisPadraoMP()
+  );
+
+  function alterarLinha(idx, campo, valor) {
+    setTabela((prev) => prev.map((l, i) => (i === idx ? { ...l, [campo]: valor } : l)));
+  }
+
+  function adicionarLinha() {
+    setTabela((prev) => [...prev, { nutriente: "", qtd_comparativa: "", porcao: "", vd_percentual: "" }]);
+  }
+
+  function removerLinha(idx) {
+    setTabela((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  async function salvar() {
+    await salvarNutricionalMateriaPrima(mp.id, {
+      fornecedor_id: fornecedorId,
+      ingredientes_texto: ingredientesTexto,
+      alergicos_texto: alergicosTexto,
+      porcao_referencia_gramas: parseFloat(porcaoReferencia) || 0,
+      tabela: tabela
+        .filter((l) => l.nutriente.trim())
+        .map((l) => ({
+          nutriente: l.nutriente,
+          qtd_comparativa: parseFloat(l.qtd_comparativa) || 0,
+          porcao: parseFloat(l.porcao) || 0,
+          vd_percentual: l.vd_percentual,
+        })),
+    });
+    setEditando(false);
+  }
+
+  const fornecedorNome = fornecedores.find((f) => f.id === nutricional?.fornecedor_id)?.nome;
+
+  if (!editando) {
+    return (
+      <div className="mt-5 pt-4 border-t border-line">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs uppercase tracking-wide text-muted flex items-center gap-1.5">
+            <ClipboardList size={13} className="text-gold" /> Nutricional do fornecedor
+          </p>
+          <button onClick={() => setEditando(true)} className="text-xs text-sage hover:underline">
+            {nutricional ? "Editar" : "Cadastrar"}
+          </button>
+        </div>
+        {nutricional ? (
+          <div className="text-xs space-y-2">
+            <p>
+              <span className="text-muted">Fornecedor: </span>
+              {fornecedorNome || "—"}
+            </p>
+            {nutricional.ingredientes_texto && <p className="text-muted leading-relaxed">{nutricional.ingredientes_texto}</p>}
+            {nutricional.alergicos_texto && <p className="text-brick leading-relaxed">{nutricional.alergicos_texto}</p>}
+            {mp.tabela_nutricional?.length > 0 && (
+              <table className="w-full mt-2">
+                <thead>
+                  <tr className="text-left text-[10px] uppercase text-muted border-b border-line">
+                    <th className="py-1 font-medium">Nutriente</th>
+                    <th className="py-1 font-medium text-right">Qtd. comparativa</th>
+                    <th className="py-1 font-medium text-right">Porção</th>
+                    <th className="py-1 font-medium text-right">%VD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mp.tabela_nutricional.map((n, i) => (
+                    <tr key={i} className="border-b border-line/60 last:border-0">
+                      <td className="py-1">{n.nutriente}</td>
+                      <td className="py-1 text-right font-mono-num">{n.qtd_comparativa}</td>
+                      <td className="py-1 text-right font-mono-num">{n.porcao}</td>
+                      <td className="py-1 text-right font-mono-num">{n.vd_percentual || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-muted italic">Ainda não cadastrada.</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5 pt-4 border-t border-line space-y-3">
+      <p className="text-xs uppercase tracking-wide text-muted flex items-center gap-1.5">
+        <ClipboardList size={13} className="text-gold" /> Nutricional do fornecedor
+      </p>
+      <Campo label="Fornecedor">
+        <select
+          value={fornecedorId}
+          onChange={(e) => setFornecedorId(e.target.value)}
+          className="w-full px-2 py-1.5 border border-line rounded-md text-sm"
+        >
+          <option value="">—</option>
+          {fornecedores.map((f) => (
+            <option key={f.id} value={f.id}>{f.nome}</option>
+          ))}
+        </select>
+      </Campo>
+      <Campo label="Porção de referência do rótulo (g)">
+        <input
+          type="number"
+          step="0.1"
+          value={porcaoReferencia}
+          onChange={(e) => setPorcaoReferencia(e.target.value)}
+          className="w-full px-2 py-1.5 border border-line rounded-md text-sm font-mono-num"
+        />
+      </Campo>
+      <Campo label="Ingredientes (do rótulo)">
+        <textarea
+          value={ingredientesTexto}
+          onChange={(e) => setIngredientesTexto(e.target.value)}
+          rows={3}
+          placeholder="INGREDIENTES: ..."
+          className="w-full px-2 py-1.5 border border-line rounded-md text-xs resize-y"
+        />
+      </Campo>
+      <Campo label="Alérgicos (do rótulo)">
+        <textarea
+          value={alergicosTexto}
+          onChange={(e) => setAlergicosTexto(e.target.value)}
+          rows={2}
+          placeholder="ALÉRGICOS: ..."
+          className="w-full px-2 py-1.5 border border-line rounded-md text-xs resize-y"
+        />
+      </Campo>
+
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-xs text-muted">Tabela nutricional do rótulo</p>
+          <button onClick={adicionarLinha} className="text-xs text-sage hover:underline flex items-center gap-1">
+            <Plus size={12} /> linha
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-[10px] uppercase text-muted border-b border-line">
+                <th className="py-1 font-medium">Nutriente</th>
+                <th className="py-1 font-medium">Qtd. comp.</th>
+                <th className="py-1 font-medium">Porção</th>
+                <th className="py-1 font-medium">%VD</th>
+                <th className="py-1 w-6"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {tabela.map((l, i) => (
+                <tr key={i} className="border-b border-line/60 last:border-0">
+                  <td className="py-1 pr-1">
+                    <input
+                      value={l.nutriente}
+                      onChange={(e) => alterarLinha(i, "nutriente", e.target.value)}
+                      className="w-full px-2 py-1 border border-line rounded-md text-xs"
+                    />
+                  </td>
+                  <td className="py-1 pr-1">
+                    <input
+                      value={l.qtd_comparativa}
+                      onChange={(e) => alterarLinha(i, "qtd_comparativa", e.target.value)}
+                      className="w-16 px-2 py-1 border border-line rounded-md text-xs"
+                    />
+                  </td>
+                  <td className="py-1 pr-1">
+                    <input
+                      value={l.porcao}
+                      onChange={(e) => alterarLinha(i, "porcao", e.target.value)}
+                      className="w-16 px-2 py-1 border border-line rounded-md text-xs"
+                    />
+                  </td>
+                  <td className="py-1 pr-1">
+                    <input
+                      value={l.vd_percentual}
+                      onChange={(e) => alterarLinha(i, "vd_percentual", e.target.value)}
+                      className="w-14 px-2 py-1 border border-line rounded-md text-xs"
+                    />
+                  </td>
+                  <td className="py-1">
+                    <button onClick={() => removerLinha(i)} className="text-muted hover:text-brick">
+                      <X size={12} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <button onClick={() => setEditando(false)} className="text-xs text-muted hover:text-brick">
+          Cancelar
+        </button>
+        <button onClick={salvar} className="text-xs bg-sage text-white px-3 py-1.5 rounded-md hover:opacity-90">
+          Salvar nutricional
+        </button>
+      </div>
     </div>
   );
 }
