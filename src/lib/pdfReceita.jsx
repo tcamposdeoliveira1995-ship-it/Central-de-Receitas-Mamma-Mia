@@ -3,6 +3,7 @@
 import { Document, Page, View, Text, Image, StyleSheet, Font } from "@react-pdf/renderer";
 import { formatBRL, formatNumber } from "@/lib/calc";
 import { LABEL_TIPO_RECEITA } from "@/lib/tiposReceita";
+import { calcularAlertasRotulagem } from "@/lib/rotulagemFrontal";
 
 const CORES = {
   gold: "#b8863b",
@@ -156,6 +157,20 @@ const styles = StyleSheet.create({
   nutriQtd: { width: "20%", textAlign: "right", fontSize: 9.5 },
   nutriPorcao: { width: "20%", textAlign: "right", fontSize: 9.5 },
   nutriVd: { width: "20%", textAlign: "right", fontSize: 9.5 },
+  alertasTitulo: { fontSize: 7.5, color: CORES.muted, textTransform: "uppercase", letterSpacing: 0.4, marginTop: 10, marginBottom: 5 },
+  alertasRow: { flexDirection: "row", flexWrap: "wrap" },
+  alertaBadge: {
+    backgroundColor: "#000000",
+    color: "#ffffff",
+    fontSize: 7.5,
+    fontFamily: "Helvetica-Bold",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    marginRight: 5,
+    marginBottom: 5,
+  },
+  alertasRodape: { fontSize: 7, color: CORES.muted, marginTop: 2 },
   rodape: {
     position: "absolute",
     bottom: 30,
@@ -308,7 +323,7 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
                     <Text style={styles.nutriTitulo}>Tabela nutricional</Text>
                     <View style={styles.nutriHeader}>
                       <Text style={[styles.nutriHeaderCel, styles.nutriNome]}>Nutriente</Text>
-                      <Text style={[styles.nutriHeaderCel, styles.nutriQtd]}>Qtd. comparativa</Text>
+                      <Text style={[styles.nutriHeaderCel, styles.nutriQtd]}>Qtd. comp.</Text>
                       <Text style={[styles.nutriHeaderCel, styles.nutriPorcao]}>Porção</Text>
                       <Text style={[styles.nutriHeaderCel, styles.nutriVd]}>%VD</Text>
                     </View>
@@ -320,6 +335,24 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
                         <Text style={styles.nutriVd}>{n.vd_percentual || "-"}</Text>
                       </View>
                     ))}
+
+                    {(() => {
+                      const alertasRotulagem = calcularAlertasRotulagem(produto.tabela_nutricional);
+                      if (alertasRotulagem.length === 0) return null;
+                      return (
+                        <>
+                          <Text style={styles.alertasTitulo}>Rotulagem frontal obrigatória</Text>
+                          <View style={styles.alertasRow}>
+                            {alertasRotulagem.map((a) => (
+                              <Text key={a.tipo} style={styles.alertaBadge}>{a.texto}</Text>
+                            ))}
+                          </View>
+                          <Text style={styles.alertasRodape}>
+                            Calculado por 100g conforme RDC 429/2020 — confira a arte final do selo antes de imprimir a embalagem.
+                          </Text>
+                        </>
+                      );
+                    })()}
                   </>
                 ) : null}
               </View>
