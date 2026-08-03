@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Plus, Search, X, ChevronRight, Upload, FileText, Check, Loader2, Layers, Download, Flame } from "lucide-react";
+import { Plus, Search, X, ChevronRight, ChevronDown, ChevronUp, Upload, FileText, Check, Loader2, Layers, Download, Flame, Package, Trash2, ClipboardList } from "lucide-react";
 import { pdf } from "@react-pdf/renderer";
 import { useStore } from "@/lib/store";
 import { calcularCMV, custoPorKgReceita, custoEfetivoIngrediente, converterQuantidade, formatBRL, formatNumber } from "@/lib/calc";
@@ -524,6 +524,8 @@ function ReceitaDetalhe({ receita }) {
         </div>
       </div>
 
+      <ProdutosSKU receitaId={receita.id} produtos={receita.produtos} />
+
       {/* Upload de ficha técnica em PDF */}
       <div className="mt-5 border border-dashed border-line rounded-lg p-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -849,6 +851,466 @@ function ReceitaDetalhe({ receita }) {
         <span className="text-xs uppercase tracking-wide text-muted">CMV unitário</span>
         <span className="font-display text-xl font-mono-num text-sage">{formatBRL(cmv.cmvUnitario)}</span>
         <span className="text-xs text-muted">(produção prevista: {formatNumber(quantidadeProducao, 0)} un)</span>
+      </div>
+    </div>
+  );
+}
+
+// ── PRODUTOS / SKUs DA RECEITA ─────────────────────────────────────
+// Uma receita pode gerar mais de um produto/código vendável (ex: o mesmo
+// hambúrguer tem código pra versão crua e versão assada, com e sem cheddar).
+// Cada produto carrega os dados de sistema (código, EAN, NCM, CEST,
+// departamento/seção/categoria, peso, validade) e sua própria informação
+// nutricional, já que cru e assado pesam e nutrem diferente.
+
+const TIPOS_EMBALAGEM = ["PCT", "CX", "UN", "KG"];
+
+function produtoVazio() {
+  return {
+    codigo: "",
+    nome_produto: "",
+    tipo_embalagem: "PCT",
+    codigo_barras: "",
+    ncm: "",
+    cest: "",
+    departamento: "",
+    secao: "",
+    categoria: "",
+    peso_liquido: "",
+    peso_bruto: "",
+    validade_dias: "",
+    status: "ativo",
+  };
+}
+
+function CampoProduto({ label, className = "", children }) {
+  return (
+    <label className={`text-muted ${className}`}>
+      {label}
+      <div className="mt-1">{children}</div>
+    </label>
+  );
+}
+
+function InfoLinha({ label, valor }) {
+  return (
+    <div>
+      <p className="text-muted uppercase tracking-wide text-[10px]">{label}</p>
+      <p className="mt-0.5">{valor || "—"}</p>
+    </div>
+  );
+}
+
+function CamposProduto({ valores, onChange }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+      <CampoProduto label="Código">
+        <input value={valores.codigo} onChange={(e) => onChange({ ...valores, codigo: e.target.value })} className="input" />
+      </CampoProduto>
+      <CampoProduto label="Nome do produto" className="col-span-2">
+        <input value={valores.nome_produto} onChange={(e) => onChange({ ...valores, nome_produto: e.target.value })} className="input" />
+      </CampoProduto>
+      <CampoProduto label="Tipo">
+        <select value={valores.tipo_embalagem} onChange={(e) => onChange({ ...valores, tipo_embalagem: e.target.value })} className="input">
+          {TIPOS_EMBALAGEM.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </CampoProduto>
+      <CampoProduto label="Código de barras (EAN)">
+        <input value={valores.codigo_barras} onChange={(e) => onChange({ ...valores, codigo_barras: e.target.value })} className="input" />
+      </CampoProduto>
+      <CampoProduto label="NCM">
+        <input value={valores.ncm} onChange={(e) => onChange({ ...valores, ncm: e.target.value })} className="input" />
+      </CampoProduto>
+      <CampoProduto label="CEST">
+        <input value={valores.cest} onChange={(e) => onChange({ ...valores, cest: e.target.value })} className="input" />
+      </CampoProduto>
+      <CampoProduto label="Departamento">
+        <input value={valores.departamento} onChange={(e) => onChange({ ...valores, departamento: e.target.value })} className="input" />
+      </CampoProduto>
+      <CampoProduto label="Seção">
+        <input value={valores.secao} onChange={(e) => onChange({ ...valores, secao: e.target.value })} className="input" />
+      </CampoProduto>
+      <CampoProduto label="Categoria">
+        <input value={valores.categoria} onChange={(e) => onChange({ ...valores, categoria: e.target.value })} className="input" />
+      </CampoProduto>
+      <CampoProduto label="Peso líquido (kg)">
+        <input type="number" step="0.001" value={valores.peso_liquido} onChange={(e) => onChange({ ...valores, peso_liquido: e.target.value })} className="input" />
+      </CampoProduto>
+      <CampoProduto label="Peso bruto (kg)">
+        <input type="number" step="0.001" value={valores.peso_bruto} onChange={(e) => onChange({ ...valores, peso_bruto: e.target.value })} className="input" />
+      </CampoProduto>
+      <CampoProduto label="Validade (dias)">
+        <input type="number" value={valores.validade_dias} onChange={(e) => onChange({ ...valores, validade_dias: e.target.value })} className="input" />
+      </CampoProduto>
+    </div>
+  );
+}
+
+function ProdutosSKU({ receitaId, produtos }) {
+  const { adicionarProduto } = useStore();
+  const [adicionando, setAdicionando] = useState(false);
+  const [novo, setNovo] = useState(produtoVazio());
+
+  async function salvarNovoProduto() {
+    if (!novo.codigo.trim() || !novo.nome_produto.trim()) return;
+    await adicionarProduto(receitaId, {
+      ...novo,
+      peso_liquido: parseFloat(novo.peso_liquido) || 0,
+      peso_bruto: parseFloat(novo.peso_bruto) || 0,
+    });
+    setNovo(produtoVazio());
+    setAdicionando(false);
+  }
+
+  return (
+    <div className="mt-5 border border-line rounded-lg p-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Package size={16} className="text-gold" />
+          Produtos / Códigos (SKUs)
+        </div>
+        <button
+          type="button"
+          onClick={() => setAdicionando((v) => !v)}
+          className="flex items-center gap-1.5 text-xs bg-sage-soft text-sage px-3 py-1.5 rounded-md hover:opacity-90"
+        >
+          <Plus size={13} /> Novo produto
+        </button>
+      </div>
+
+      {adicionando && (
+        <div className="mt-3 bg-gold-soft/20 border border-gold/30 rounded-lg p-3">
+          <CamposProduto valores={novo} onChange={setNovo} />
+          <div className="flex justify-end gap-2 mt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setAdicionando(false);
+                setNovo(produtoVazio());
+              }}
+              className="px-3 py-1.5 text-xs text-muted hover:text-brick"
+            >
+              Cancelar
+            </button>
+            <button type="button" onClick={salvarNovoProduto} className="px-3 py-1.5 text-xs bg-sage text-white rounded-md hover:opacity-90">
+              Salvar produto
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3 space-y-2">
+        {(produtos || []).map((p) => (
+          <ProdutoItem key={p.id} receitaId={receitaId} produto={p} />
+        ))}
+        {(!produtos || produtos.length === 0) && !adicionando && (
+          <p className="text-xs text-muted text-center py-3">Nenhum produto/código cadastrado ainda pra essa receita.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProdutoItem({ receitaId, produto }) {
+  const { atualizarProduto, excluirProduto } = useStore();
+  const [expandido, setExpandido] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [campos, setCampos] = useState(() => ({ ...produtoVazio(), ...produto }));
+
+  async function salvarEdicao() {
+    await atualizarProduto(receitaId, produto.id, {
+      ...campos,
+      peso_liquido: parseFloat(campos.peso_liquido) || 0,
+      peso_bruto: parseFloat(campos.peso_bruto) || 0,
+    });
+    setEditando(false);
+  }
+
+  async function remover() {
+    if (
+      !confirm(
+        `Excluir o produto "${produto.nome_produto || produto.codigo}"? Isso também apaga a informação nutricional dele.`
+      )
+    )
+      return;
+    await excluirProduto(receitaId, produto.id);
+  }
+
+  return (
+    <div className="border border-line rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpandido((v) => !v)}
+        className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-gold-soft/20"
+      >
+        <span className="flex items-center gap-2">
+          <Package size={14} className="text-sage" />
+          <span className="font-mono-num text-xs text-muted">{produto.codigo}</span>
+          <span className="font-medium">{produto.nome_produto}</span>
+          {produto.tipo_embalagem && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-sage-soft text-sage">{produto.tipo_embalagem}</span>
+          )}
+        </span>
+        {expandido ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
+      </button>
+
+      {expandido && (
+        <div className="border-t border-line p-3 space-y-4">
+          <div className="flex justify-end gap-3">
+            {editando ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditando(false);
+                    setCampos({ ...produtoVazio(), ...produto });
+                  }}
+                  className="text-xs text-muted hover:text-brick"
+                >
+                  Cancelar
+                </button>
+                <button type="button" onClick={salvarEdicao} className="text-xs bg-sage text-white px-3 py-1 rounded-md hover:opacity-90">
+                  Salvar dados
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={() => setEditando(true)} className="text-xs text-sage hover:underline">
+                  Editar dados do produto
+                </button>
+                <button type="button" onClick={remover} className="text-xs text-brick hover:underline flex items-center gap-1">
+                  <Trash2 size={12} /> Excluir
+                </button>
+              </>
+            )}
+          </div>
+
+          {editando ? (
+            <CamposProduto valores={campos} onChange={setCampos} />
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
+              <InfoLinha label="Código de barras" valor={produto.codigo_barras} />
+              <InfoLinha label="NCM" valor={produto.ncm} />
+              <InfoLinha label="CEST" valor={produto.cest} />
+              <InfoLinha label="Departamento" valor={produto.departamento} />
+              <InfoLinha label="Seção" valor={produto.secao} />
+              <InfoLinha label="Categoria" valor={produto.categoria} />
+              <InfoLinha label="Peso líquido" valor={produto.peso_liquido ? `${produto.peso_liquido} kg` : ""} />
+              <InfoLinha label="Validade" valor={produto.validade_dias ? `${produto.validade_dias} dias` : ""} />
+            </div>
+          )}
+
+          <NutricionalProduto receitaId={receitaId} produto={produto} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function linhasNutricionaisPadrao() {
+  return [
+    "Valor energético (kcal)",
+    "Carboidratos (g)",
+    "Açúcares totais (g)",
+    "Açúcares adicionados (g)",
+    "Proteínas (g)",
+    "Gorduras totais (g)",
+    "Gorduras saturadas (g)",
+    "Gorduras trans (g)",
+    "Fibra alimentar (g)",
+    "Sódio (mg)",
+  ].map((nutriente) => ({ nutriente, qtd_comparativa: "", porcao: "", vd_percentual: "" }));
+}
+
+function NutricionalProduto({ receitaId, produto }) {
+  const { salvarInfoNutricional } = useStore();
+  const info = produto.info_nutricional;
+  const [editando, setEditando] = useState(false);
+  const [apelido, setApelido] = useState(info?.apelido || "");
+  const [ingredientesTexto, setIngredientesTexto] = useState(info?.ingredientes_texto || "");
+  const [alergicosTexto, setAlergicosTexto] = useState(info?.alergicos_texto || "");
+  const [porcaoGramas, setPorcaoGramas] = useState(info?.porcao_gramas || "");
+  const [medidaCaseira, setMedidaCaseira] = useState(info?.medida_caseira || "");
+  const [tabela, setTabela] = useState(() =>
+    produto.tabela_nutricional?.length ? produto.tabela_nutricional : linhasNutricionaisPadrao()
+  );
+
+  function alterarLinha(idx, campo, valor) {
+    setTabela((prev) => prev.map((l, i) => (i === idx ? { ...l, [campo]: valor } : l)));
+  }
+
+  function adicionarLinha() {
+    setTabela((prev) => [...prev, { nutriente: "", qtd_comparativa: "", porcao: "", vd_percentual: "" }]);
+  }
+
+  function removerLinha(idx) {
+    setTabela((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  async function salvar() {
+    await salvarInfoNutricional(receitaId, produto.id, {
+      apelido,
+      ingredientes_texto: ingredientesTexto,
+      alergicos_texto: alergicosTexto,
+      porcao_gramas: parseFloat(porcaoGramas) || 0,
+      medida_caseira: medidaCaseira,
+      tabela: tabela
+        .filter((l) => l.nutriente.trim())
+        .map((l) => ({
+          nutriente: l.nutriente,
+          qtd_comparativa: parseFloat(l.qtd_comparativa) || 0,
+          porcao: parseFloat(l.porcao) || 0,
+          vd_percentual: l.vd_percentual,
+        })),
+    });
+    setEditando(false);
+  }
+
+  if (!editando) {
+    return (
+      <div className="border-t border-line pt-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium flex items-center gap-1.5">
+            <ClipboardList size={13} className="text-gold" /> Informação nutricional
+          </p>
+          <button type="button" onClick={() => setEditando(true)} className="text-xs text-sage hover:underline">
+            {info ? "Editar" : "Cadastrar"}
+          </button>
+        </div>
+        {info ? (
+          <div className="mt-2 text-xs space-y-2">
+            <p>
+              <span className="text-muted">Apelido: </span>
+              {info.apelido || "—"}
+            </p>
+            {info.ingredientes_texto && <p className="text-muted leading-relaxed">{info.ingredientes_texto}</p>}
+            {info.alergicos_texto && <p className="text-brick leading-relaxed">{info.alergicos_texto}</p>}
+            {produto.tabela_nutricional?.length > 0 && (
+              <table className="w-full mt-2">
+                <thead>
+                  <tr className="text-left text-[10px] uppercase text-muted border-b border-line">
+                    <th className="py-1 font-medium">Nutriente</th>
+                    <th className="py-1 font-medium text-right">Qtd. comparativa</th>
+                    <th className="py-1 font-medium text-right">Porção</th>
+                    <th className="py-1 font-medium text-right">%VD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {produto.tabela_nutricional.map((n, i) => (
+                    <tr key={i} className="border-b border-line/60 last:border-0">
+                      <td className="py-1">{n.nutriente}</td>
+                      <td className="py-1 text-right font-mono-num">{n.qtd_comparativa}</td>
+                      <td className="py-1 text-right font-mono-num">{n.porcao}</td>
+                      <td className="py-1 text-right font-mono-num">{n.vd_percentual || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-muted mt-1.5">Ainda não cadastrada.</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-line pt-3 space-y-3">
+      <p className="text-xs font-medium flex items-center gap-1.5">
+        <ClipboardList size={13} className="text-gold" /> Informação nutricional
+      </p>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <CampoProduto label="Apelido">
+          <input value={apelido} onChange={(e) => setApelido(e.target.value)} className="input" />
+        </CampoProduto>
+        <CampoProduto label="Porção (g)">
+          <input type="number" step="0.1" value={porcaoGramas} onChange={(e) => setPorcaoGramas(e.target.value)} className="input" />
+        </CampoProduto>
+        <CampoProduto label="Medida caseira" className="col-span-2">
+          <input
+            value={medidaCaseira}
+            onChange={(e) => setMedidaCaseira(e.target.value)}
+            placeholder="Ex: 1 unidade (105g)"
+            className="input"
+          />
+        </CampoProduto>
+      </div>
+      <label className="text-xs text-muted block">
+        Ingredientes
+        <textarea
+          value={ingredientesTexto}
+          onChange={(e) => setIngredientesTexto(e.target.value)}
+          rows={3}
+          placeholder="INGREDIENTES: ..."
+          className="w-full mt-1 px-2 py-1.5 border border-line rounded-md text-xs resize-y"
+        />
+      </label>
+      <label className="text-xs text-muted block">
+        Alérgicos
+        <textarea
+          value={alergicosTexto}
+          onChange={(e) => setAlergicosTexto(e.target.value)}
+          rows={2}
+          placeholder="ALÉRGICOS: ..."
+          className="w-full mt-1 px-2 py-1.5 border border-line rounded-md text-xs resize-y"
+        />
+      </label>
+
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-xs text-muted">Tabela nutricional</p>
+          <button type="button" onClick={adicionarLinha} className="text-xs text-sage hover:underline flex items-center gap-1">
+            <Plus size={12} /> linha
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-left text-[10px] uppercase text-muted border-b border-line">
+              <th className="py-1 font-medium">Nutriente</th>
+              <th className="py-1 font-medium">Qtd. comp.</th>
+              <th className="py-1 font-medium">Porção</th>
+              <th className="py-1 font-medium">%VD</th>
+              <th className="py-1 w-6"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {tabela.map((l, i) => (
+              <tr key={i} className="border-b border-line/60 last:border-0">
+                <td className="py-1 pr-1">
+                  <input value={l.nutriente} onChange={(e) => alterarLinha(i, "nutriente", e.target.value)} className="input" />
+                </td>
+                <td className="py-1 pr-1">
+                  <input value={l.qtd_comparativa} onChange={(e) => alterarLinha(i, "qtd_comparativa", e.target.value)} className="input w-16" />
+                </td>
+                <td className="py-1 pr-1">
+                  <input value={l.porcao} onChange={(e) => alterarLinha(i, "porcao", e.target.value)} className="input w-16" />
+                </td>
+                <td className="py-1 pr-1">
+                  <input value={l.vd_percentual} onChange={(e) => alterarLinha(i, "vd_percentual", e.target.value)} className="input w-14" />
+                </td>
+                <td className="py-1">
+                  <button type="button" onClick={() => removerLinha(i)} className="text-muted hover:text-brick">
+                    <X size={12} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={() => setEditando(false)} className="text-xs text-muted hover:text-brick">
+          Cancelar
+        </button>
+        <button type="button" onClick={salvar} className="text-xs bg-sage text-white px-3 py-1.5 rounded-md hover:opacity-90">
+          Salvar informação nutricional
+        </button>
       </div>
     </div>
   );
