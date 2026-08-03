@@ -1,6 +1,6 @@
 "use client";
 
-import { Document, Page, View, Text, Image, StyleSheet, Font, Svg, Polygon, Rect } from "@react-pdf/renderer";
+import { Document, Page, View, Text, Image, StyleSheet, Font, Svg, Circle, Line } from "@react-pdf/renderer";
 import { formatBRL, formatNumber } from "@/lib/calc";
 import { LABEL_TIPO_RECEITA } from "@/lib/tiposReceita";
 import { calcularAlertasRotulagem } from "@/lib/rotulagemFrontal";
@@ -166,9 +166,27 @@ const styles = StyleSheet.create({
   nutriPorcao: { width: "20%", textAlign: "right", fontSize: 9.5 },
   nutriVd: { width: "20%", textAlign: "right", fontSize: 9.5 },
   alertasTitulo: { fontSize: 7.5, color: CORES.muted, textTransform: "uppercase", letterSpacing: 0.4, marginTop: 10, marginBottom: 5 },
-  alertasRow: { flexDirection: "row", flexWrap: "wrap" },
-  lupaBox: { width: 44, marginRight: 12, marginBottom: 6 },
-  alertasRodape: { fontSize: 7, color: CORES.muted, marginTop: 4 },
+  lupaContainer: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    borderWidth: 1.4,
+    borderColor: "#000000",
+    borderRadius: 3,
+    alignSelf: "flex-start",
+  },
+  lupaIconBox: { flexDirection: "row", alignItems: "center", paddingHorizontal: 6, paddingVertical: 5 },
+  lupaAltoEm: { fontSize: 6.5, fontFamily: "Helvetica-Bold", color: "#000000", marginLeft: 3 },
+  lupaNutrienteBox: {
+    backgroundColor: "#000000",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderLeftWidth: 1.4,
+    borderLeftColor: "#000000",
+  },
+  lupaNutrienteTexto: { color: "#ffffff", fontSize: 6.5, fontFamily: "Helvetica-Bold", textAlign: "center" },
+  alertasRodape: { fontSize: 7, color: CORES.muted, marginTop: 6 },
   rodape: {
     position: "absolute",
     bottom: 30,
@@ -185,30 +203,30 @@ const styles = StyleSheet.create({
   },
 });
 
-// Selo de rotulagem nutricional frontal (RDC 429/2020 / IN 75/2020) desenhado
-// em SVG: um octógono preto (o "lente" da lupa) com uma alça retangular
-// rotacionada saindo do canto inferior direito, e o texto branco
-// centralizado dentro do octógono ("ALTO EM" + o nutriente).
-function LupaRotulagemPDF({ linhas }) {
+// Selo de rotulagem nutricional frontal (RDC 429/2020 / IN 75/2020): UM selo
+// só por produto — ícone de lupa (círculo + cabo, sem preenchimento) e
+// "ALTO EM" em preto sobre fundo branco, seguido de um bloco preto com
+// texto branco pra CADA nutriente que passou do limite, tudo dentro de uma
+// borda preta única (não uma lupa por nutriente).
+function LupaRotulagemPDF({ alertas }) {
+  if (!alertas || alertas.length === 0) return null;
   return (
-    <Svg width="44" height="56" viewBox="0 0 44 56">
-      <Polygon points="13.2,0 30.8,0 44,13.2 44,30.8 30.8,44 13.2,44 0,30.8 0,13.2" fill="#000000" />
-      <Rect x="30" y="36" width="7" height="18" rx="2" fill="#000000" transform="rotate(45, 33.5, 45)" />
-      <Text x="22" y="16" textAnchor="middle" fontSize="4.2" fontFamily="Helvetica-Bold" fill="#ffffff">ALTO EM</Text>
-      {linhas.map((linha, i) => (
-        <Text
-          key={i}
-          x="22"
-          y={24 + i * 7}
-          textAnchor="middle"
-          fontSize="5.2"
-          fontFamily="Helvetica-Bold"
-          fill="#ffffff"
-        >
-          {linha}
-        </Text>
+    <View style={styles.lupaContainer}>
+      <View style={styles.lupaIconBox}>
+        <Svg width="12" height="12" viewBox="0 0 12 12">
+          <Circle cx="5" cy="5" r="3.8" stroke="#000000" strokeWidth="1.3" fill="none" />
+          <Line x1="7.7" y1="7.7" x2="11" y2="11" stroke="#000000" strokeWidth="1.5" />
+        </Svg>
+        <Text style={styles.lupaAltoEm}>ALTO EM</Text>
+      </View>
+      {alertas.map((a) => (
+        <View key={a.tipo} style={styles.lupaNutrienteBox}>
+          {a.linhas.map((linha, i) => (
+            <Text key={i} style={styles.lupaNutrienteTexto}>{linha}</Text>
+          ))}
+        </View>
       ))}
-    </Svg>
+    </View>
   );
 }
 
@@ -381,13 +399,7 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
                       return (
                         <>
                           <Text style={styles.alertasTitulo}>Rotulagem frontal obrigatória</Text>
-                          <View style={styles.alertasRow}>
-                            {alertasRotulagem.map((a) => (
-                              <View style={styles.lupaBox} key={a.tipo}>
-                                <LupaRotulagemPDF linhas={a.linhas} />
-                              </View>
-                            ))}
-                          </View>
+                          <LupaRotulagemPDF alertas={alertasRotulagem} />
                           <Text style={styles.alertasRodape}>
                             Calculado por 100g conforme RDC 429/2020 — confira a arte final do selo antes de imprimir a embalagem.
                           </Text>
