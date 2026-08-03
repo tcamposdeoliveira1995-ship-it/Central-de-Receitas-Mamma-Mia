@@ -1,6 +1,6 @@
 "use client";
 
-import { Document, Page, View, Text, Image, StyleSheet, Font } from "@react-pdf/renderer";
+import { Document, Page, View, Text, Image, StyleSheet, Font, Svg, Polygon, Rect } from "@react-pdf/renderer";
 import { formatBRL, formatNumber } from "@/lib/calc";
 import { LABEL_TIPO_RECEITA } from "@/lib/tiposReceita";
 import { calcularAlertasRotulagem } from "@/lib/rotulagemFrontal";
@@ -167,18 +167,8 @@ const styles = StyleSheet.create({
   nutriVd: { width: "20%", textAlign: "right", fontSize: 9.5 },
   alertasTitulo: { fontSize: 7.5, color: CORES.muted, textTransform: "uppercase", letterSpacing: 0.4, marginTop: 10, marginBottom: 5 },
   alertasRow: { flexDirection: "row", flexWrap: "wrap" },
-  alertaBadge: {
-    backgroundColor: "#000000",
-    color: "#ffffff",
-    fontSize: 7.5,
-    fontFamily: "Helvetica-Bold",
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    marginRight: 5,
-    marginBottom: 5,
-  },
-  alertasRodape: { fontSize: 7, color: CORES.muted, marginTop: 2 },
+  lupaBox: { width: 44, marginRight: 12, marginBottom: 6 },
+  alertasRodape: { fontSize: 7, color: CORES.muted, marginTop: 4 },
   rodape: {
     position: "absolute",
     bottom: 30,
@@ -194,6 +184,33 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
 });
+
+// Selo de rotulagem nutricional frontal (RDC 429/2020 / IN 75/2020) desenhado
+// em SVG: um octógono preto (o "lente" da lupa) com uma alça retangular
+// rotacionada saindo do canto inferior direito, e o texto branco
+// centralizado dentro do octógono ("ALTO EM" + o nutriente).
+function LupaRotulagemPDF({ linhas }) {
+  return (
+    <Svg width="44" height="56" viewBox="0 0 44 56">
+      <Polygon points="13.2,0 30.8,0 44,13.2 44,30.8 30.8,44 13.2,44 0,30.8 0,13.2" fill="#000000" />
+      <Rect x="30" y="36" width="7" height="18" rx="2" fill="#000000" transform="rotate(45, 33.5, 45)" />
+      <Text x="22" y="16" textAnchor="middle" fontSize="4.2" fontFamily="Helvetica-Bold" fill="#ffffff">ALTO EM</Text>
+      {linhas.map((linha, i) => (
+        <Text
+          key={i}
+          x="22"
+          y={24 + i * 7}
+          textAnchor="middle"
+          fontSize="5.2"
+          fontFamily="Helvetica-Bold"
+          fill="#ffffff"
+        >
+          {linha}
+        </Text>
+      ))}
+    </Svg>
+  );
+}
 
 export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeItem, apresentacaoLabel, valorUnitario, unidadePreco, valorTotal, mostrarCustos = true }) {
   const geradoEm = new Date().toLocaleDateString("pt-BR");
@@ -366,7 +383,9 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
                           <Text style={styles.alertasTitulo}>Rotulagem frontal obrigatória</Text>
                           <View style={styles.alertasRow}>
                             {alertasRotulagem.map((a) => (
-                              <Text key={a.tipo} style={styles.alertaBadge}>{a.texto}</Text>
+                              <View style={styles.lupaBox} key={a.tipo}>
+                                <LupaRotulagemPDF linhas={a.linhas} />
+                              </View>
                             ))}
                           </View>
                           <Text style={styles.alertasRodape}>
