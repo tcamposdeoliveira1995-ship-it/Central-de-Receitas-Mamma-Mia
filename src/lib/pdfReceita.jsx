@@ -84,6 +84,13 @@ const styles = StyleSheet.create({
   celUnid: { width: "8%", fontSize: 11 },
   celValorUnit: { width: "13%", textAlign: "right", fontSize: 11 },
   celValor: { width: "13%", textAlign: "right", fontFamily: "Helvetica-Bold", fontSize: 11 },
+  // Larguras usadas quando o PDF é gerado sem custos (colunas de valor
+  // somem e as colunas restantes crescem pra preencher a linha toda).
+  celNomeSemCusto: { width: "36%", fontSize: 11 },
+  celApresSemCusto: { width: "20%", fontSize: 11 },
+  celObsSemCusto: { width: "20%", fontSize: 11 },
+  celQtdeSemCusto: { width: "14%", textAlign: "right", fontSize: 11 },
+  celUnidSemCusto: { width: "10%", fontSize: 11 },
   totaisRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -187,8 +194,13 @@ const styles = StyleSheet.create({
   },
 });
 
-export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeItem, apresentacaoLabel, valorUnitario, unidadePreco, valorTotal }) {
+export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeItem, apresentacaoLabel, valorUnitario, unidadePreco, valorTotal, mostrarCustos = true }) {
   const geradoEm = new Date().toLocaleDateString("pt-BR");
+  const celNome = mostrarCustos ? styles.celNome : styles.celNomeSemCusto;
+  const celApres = mostrarCustos ? styles.celApres : styles.celApresSemCusto;
+  const celObs = mostrarCustos ? styles.celObs : styles.celObsSemCusto;
+  const celQtde = mostrarCustos ? styles.celQtde : styles.celQtdeSemCusto;
+  const celUnid = mostrarCustos ? styles.celUnid : styles.celUnidSemCusto;
 
   return (
     <Document>
@@ -209,45 +221,49 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
 
         <Text style={styles.secaoTitulo}>Ingredientes</Text>
         <View style={styles.tabelaHeader}>
-          <Text style={[styles.tabelaHeaderCel, styles.celNome]}>Ingrediente</Text>
-          <Text style={[styles.tabelaHeaderCel, styles.celApres]}>Apres.</Text>
-          <Text style={[styles.tabelaHeaderCel, styles.celObs]}>Obs.</Text>
-          <Text style={[styles.tabelaHeaderCel, styles.celQtde]}>Qtde</Text>
-          <Text style={[styles.tabelaHeaderCel, styles.celUnid]}>Unid.</Text>
-          <Text style={[styles.tabelaHeaderCel, styles.celValorUnit]}>Vlr. unit.</Text>
-          <Text style={[styles.tabelaHeaderCel, styles.celValor]}>Valor</Text>
+          <Text style={[styles.tabelaHeaderCel, celNome]}>Ingrediente</Text>
+          <Text style={[styles.tabelaHeaderCel, celApres]}>Apres.</Text>
+          <Text style={[styles.tabelaHeaderCel, celObs]}>Obs.</Text>
+          <Text style={[styles.tabelaHeaderCel, celQtde]}>Qtde</Text>
+          <Text style={[styles.tabelaHeaderCel, celUnid]}>Unid.</Text>
+          {mostrarCustos && <Text style={[styles.tabelaHeaderCel, styles.celValorUnit]}>Vlr. unit.</Text>}
+          {mostrarCustos && <Text style={[styles.tabelaHeaderCel, styles.celValor]}>Valor</Text>}
         </View>
         {itens.map((linha, i) => (
           <View style={styles.tabelaLinha} key={i}>
-            <Text style={styles.celNome}>{linha.nome}</Text>
-            <Text style={styles.celApres}>{linha.apresentacao || "—"}</Text>
-            <Text style={styles.celObs}>{linha.observacao || "—"}</Text>
-            <Text style={styles.celQtde}>{formatNumber(linha.quantidade, 3)}</Text>
-            <Text style={styles.celUnid}>{linha.unidade}</Text>
-            <Text style={styles.celValorUnit}>{formatBRL(linha.valorUnitario)}/{linha.unidadePreco}</Text>
-            <Text style={styles.celValor}>{formatBRL(linha.valorTotal)}</Text>
+            <Text style={celNome}>{linha.nome}</Text>
+            <Text style={celApres}>{linha.apresentacao || "—"}</Text>
+            <Text style={celObs}>{linha.observacao || "—"}</Text>
+            <Text style={celQtde}>{formatNumber(linha.quantidade, 3)}</Text>
+            <Text style={celUnid}>{linha.unidade}</Text>
+            {mostrarCustos && <Text style={styles.celValorUnit}>{formatBRL(linha.valorUnitario)}/{linha.unidadePreco}</Text>}
+            {mostrarCustos && <Text style={styles.celValor}>{formatBRL(linha.valorTotal)}</Text>}
           </View>
         ))}
 
-        <View style={styles.totaisRow}>
-          <View style={styles.totalBloco}>
-            <Text style={styles.totalLabel}>Ingredientes</Text>
-            <Text style={styles.totalValor}>{formatBRL(cmv.custoIngredientes)}</Text>
-          </View>
-          <View style={styles.totalBloco}>
-            <Text style={styles.totalLabel}>Embalagem</Text>
-            <Text style={styles.totalValor}>{formatBRL(cmv.custoEmbalagem)}</Text>
-          </View>
-          <View style={styles.totalBloco}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValor}>{formatBRL(cmv.custoTotal)}</Text>
-          </View>
-        </View>
+        {mostrarCustos && (
+          <>
+            <View style={styles.totaisRow}>
+              <View style={styles.totalBloco}>
+                <Text style={styles.totalLabel}>Ingredientes</Text>
+                <Text style={styles.totalValor}>{formatBRL(cmv.custoIngredientes)}</Text>
+              </View>
+              <View style={styles.totalBloco}>
+                <Text style={styles.totalLabel}>Embalagem</Text>
+                <Text style={styles.totalValor}>{formatBRL(cmv.custoEmbalagem)}</Text>
+              </View>
+              <View style={styles.totalBloco}>
+                <Text style={styles.totalLabel}>Total</Text>
+                <Text style={styles.totalValor}>{formatBRL(cmv.custoTotal)}</Text>
+              </View>
+            </View>
 
-        <View style={styles.cmvDestaque}>
-          <Text style={styles.cmvLabel}>CMV unitário (produção prevista: {formatNumber(quantidadeProducao, 0)} un)</Text>
-          <Text style={styles.cmvValor}>{formatBRL(cmv.cmvUnitario)}</Text>
-        </View>
+            <View style={styles.cmvDestaque}>
+              <Text style={styles.cmvLabel}>CMV unitário (produção prevista: {formatNumber(quantidadeProducao, 0)} un)</Text>
+              <Text style={styles.cmvValor}>{formatBRL(cmv.cmvUnitario)}</Text>
+            </View>
+          </>
+        )}
 
         {receita.modo_preparo ? (
           <>
