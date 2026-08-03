@@ -302,6 +302,124 @@ export function StoreProvider({ children }) {
     return criada;
   }, []);
 
+  // ── PRODUTOS (SKUs de uma receita) ────────────────────────────────
+  // Uma receita pode ter vários produtos/códigos (ex: cru e assado do
+  // mesmo hambúrguer), cada um com seus dados de sistema (código, EAN,
+  // NCM, CEST, departamento/seção/categoria, peso, validade).
+
+  const adicionarProduto = useCallback(async (receitaId, dados) => {
+    if (!isDemoMode) {
+      const criado = await postAction("addProduto", { receita_id: receitaId, ...dados });
+      setReceitas((prev) =>
+        prev.map((r) => (r.id === receitaId ? { ...r, produtos: [...(r.produtos || []), criado] } : r))
+      );
+      return criado;
+    }
+    const criado = {
+      id: `prod-${Date.now()}`,
+      receita_id: receitaId,
+      info_nutricional: null,
+      tabela_nutricional: [],
+      ...dados,
+    };
+    setReceitas((prev) =>
+      prev.map((r) => (r.id === receitaId ? { ...r, produtos: [...(r.produtos || []), criado] } : r))
+    );
+    return criado;
+  }, []);
+
+  const atualizarProduto = useCallback(
+    async (receitaId, produtoId, dados) => {
+      setReceitas((prev) =>
+        prev.map((r) =>
+          r.id === receitaId
+            ? { ...r, produtos: (r.produtos || []).map((p) => (p.id === produtoId ? { ...p, ...dados } : p)) }
+            : r
+        )
+      );
+      if (!isDemoMode) {
+        await enfileirar(`produto:${produtoId}`, () =>
+          postAction("updateProduto", { id: produtoId, receita_id: receitaId, ...dados })
+        );
+      }
+    },
+    [enfileirar]
+  );
+
+  const excluirProduto = useCallback(
+    async (receitaId, produtoId) => {
+      setReceitas((prev) =>
+        prev.map((r) =>
+          r.id === receitaId ? { ...r, produtos: (r.produtos || []).filter((p) => p.id !== produtoId) } : r
+        )
+      );
+      if (!isDemoMode) {
+        await postAction("deleteProduto", { id: produtoId });
+      }
+    },
+    []
+  );
+
+  // Salva ingredientes/alérgicos + a tabela nutricional inteira de um produto
+  // (a tabela é sempre substituída por completo, não editada linha a linha).
+  const salvarInfoNutricional = useCallback(
+    async (receitaId, produtoId, dados) => {
+      const infoNutricional = {
+        apelido: dados.apelido || "",
+        ingredientes_texto: dados.ingredientes_texto || "",
+        alergicos_texto: dados.alergicos_texto || "",
+        porcao_gramas: dados.porcao_gramas || 0,
+        medida_caseira: dados.medida_caseira || "",
+      };
+      setReceitas((prev) =>
+        prev.map((r) =>
+          r.id === receitaId
+            ? {
+                ...r,
+                produtos: (r.produtos || []).map((p) =>
+                  p.id === produtoId
+                    ? { ...p, info_nutricional: infoNutricional, tabela_nutricional: dados.tabela || [] }
+                    : p
+                ),
+              }
+            : r
+        )
+      );
+      if (!isDemoMode) {
+        await enfileirar(`nutricional:${produtoId}`, () =>
+          postAction("salvarInfoNutricional", { produto_id: produtoId, ...dados })
+        );
+      }
+    },
+    [enfileirar]
+  );
+
+  // ── NUTRICIONAL DA MATÉRIA-PRIMA (rótulo do fornecedor) ──────────
+
+  const salvarNutricionalMateriaPrima = useCallback(
+    async (materiaPrimaId, dados) => {
+      const nutricional = {
+        fornecedor_id: dados.fornecedor_id || "",
+        ingredientes_texto: dados.ingredientes_texto || "",
+        alergicos_texto: dados.alergicos_texto || "",
+        porcao_referencia_gramas: dados.porcao_referencia_gramas || 0,
+      };
+      setMateriasPrimas((prev) =>
+        prev.map((mp) =>
+          mp.id === materiaPrimaId
+            ? { ...mp, nutricional, tabela_nutricional: dados.tabela || [] }
+            : mp
+        )
+      );
+      if (!isDemoMode) {
+        await enfileirar(`mpnutricional:${materiaPrimaId}`, () =>
+          postAction("salvarNutricionalMateriaPrima", { materia_prima_id: materiaPrimaId, ...dados })
+        );
+      }
+    },
+    [enfileirar]
+  );
+
   const value = {
     loading,
     categorias,
@@ -325,6 +443,11 @@ export function StoreProvider({ children }) {
     adicionarProducao,
     adicionarCoccao,
     adicionarRecheioFrio,
+    adicionarProduto,
+    atualizarProduto,
+    excluirProduto,
+    salvarInfoNutricional,
+    salvarNutricionalMateriaPrima,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
