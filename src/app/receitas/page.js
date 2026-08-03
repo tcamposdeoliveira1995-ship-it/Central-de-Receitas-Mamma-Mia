@@ -1272,7 +1272,7 @@ function NutricionalProduto({ receitaId, produto }) {
         <CampoProduto label="Porção (g)">
           <input type="number" step="0.1" value={porcaoGramas} onChange={(e) => setPorcaoGramas(e.target.value)} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
         </CampoProduto>
-        <CampoProduto label="Medida caseira" className="col-span-2">
+        <CampoProduto label="Qtde. PCT" className="col-span-2">
           <input
             value={medidaCaseira}
             onChange={(e) => setMedidaCaseira(e.target.value)}
