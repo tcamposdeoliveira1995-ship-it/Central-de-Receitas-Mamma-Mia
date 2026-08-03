@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { Plus, Search, X, ChevronRight, ChevronDown, ChevronUp, Upload, FileText, Check, Loader2, Layers, Download, Flame, Package, Trash2, ClipboardList } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Search, X, ChevronRight, ChevronDown, ChevronUp, Upload, FileText, Check, Loader2, Layers, Download, Flame, Package, Trash2, ClipboardList, PiggyBank } from "lucide-react";
 import { calcularAlertasRotulagem } from "@/lib/rotulagemFrontal";
 import { pdf } from "@react-pdf/renderer";
 import { useStore } from "@/lib/store";
@@ -833,6 +833,8 @@ function ReceitaDetalhe({ receita }) {
       </table>
       </div>
 
+      <EconomiaSoja itens={itens} materiasPrimasById={materiasPrimasById} receitasById={receitasById} embalagemCusto={receita.embalagem_custo || 0} />
+
       <div className="mt-5">
         <label className="text-xs uppercase tracking-wide text-muted block mb-1.5">Modo de preparo</label>
         <textarea
@@ -1404,6 +1406,113 @@ function NutricionalProduto({ receitaId, produto, cmvUnitario }) {
           Salvar informação nutricional
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── ECONOMIA COM SOJA ────────────────────────────────────────────
+// Detecta automaticamente, entre os ingredientes da receita, um item de
+// "soja" e um item de proteína (carne/frango/calabresa) — e simula quanto
+// custaria essa mesma receita se a soja não existisse e aquele peso virasse
+// proteína a mais. Como não existe um fator de hidratação fixo cadastrado,
+// o fator de substituição fica editável (começa em 1:1 — 1kg de soja
+// removida = 1kg a mais de proteína) pra você calibrar com o que sabe na
+// prática (soja hidratada rende mais peso que a seca).
+function EconomiaSoja({ itens, materiasPrimasById, receitasById, embalagemCusto }) {
+  const [fator, setFator] = useState("1");
+  const [proteinaEscolhidaId, setProteinaEscolhidaId] = useState(null);
+
+  const itemSoja = useMemo(
+    () => itens.find((i) => i.tipo !== "receita" && (i.nome || "").toLowerCase().includes("soja")),
+    [itens]
+  );
+
+  const candidatosProteina = useMemo(() => {
+    if (!itemSoja) return [];
+    const termos = ["carne", "frango", "calabres"];
+    return itens.filter(
+      (i) => i.linha_id !== itemSoja.linha_id && i.tipo !== "receita" && termos.some((t) => (i.nome || "").toLowerCase().includes(t))
+    );
+  }, [itens, itemSoja]);
+
+  useEffect(() => {
+    if (candidatosProteina.length > 0 && !candidatosProteina.some((p) => p.linha_id === proteinaEscolhidaId)) {
+      setProteinaEscolhidaId(candidatosProteina[0].linha_id);
+    }
+  }, [candidatosProteina, proteinaEscolhidaId]);
+
+  if (!itemSoja || candidatosProteina.length === 0) return null;
+
+  const itemProteina = candidatosProteina.find((p) => p.linha_id === proteinaEscolhidaId) || candidatosProteina[0];
+  const fatorNum = parseFloat(String(fator).replace(",", ".")) || 0;
+  const qtdeSojaConvertida = converterQuantidade(itemSoja.quantidade, itemSoja.unidade, itemProteina.unidade) * fatorNum;
+
+  const cmvComSoja = calcularCMV({ itens, embalagemCusto, quantidadeProducao: 1, materiasPrimasById, receitasById });
+
+  const itensSemSoja = itens
+    .filter((i) => i.linha_id !== itemSoja.linha_id)
+    .map((i) =>
+      i.linha_id === itemProteina.linha_id ? { ...i, quantidade: i.quantidade + qtdeSojaConvertida } : i
+    );
+  const cmvSemSoja = calcularCMV({ itens: itensSemSoja, embalagemCusto, quantidadeProducao: 1, materiasPrimasById, receitasById });
+
+  const economia = cmvSemSoja.custoIngredientes - cmvComSoja.custoIngredientes;
+
+  return (
+    <div className="mt-5 border border-line rounded-lg p-4">
+      <p className="text-sm font-medium flex items-center gap-1.5 mb-1">
+        <PiggyBank size={15} className="text-gold" /> Economia com soja
+      </p>
+      <p className="text-xs text-muted mb-3">
+        Simula quanto essa receita custaria se {itemSoja.nome} virasse mais {itemProteina.nome} em vez de soja.
+      </p>
+
+      <div className="flex flex-wrap items-end gap-3 mb-3">
+        {candidatosProteina.length > 1 && (
+          <label className="text-xs text-muted">
+            Proteína substituída
+            <select
+              value={proteinaEscolhidaId || ""}
+              onChange={(e) => setProteinaEscolhidaId(e.target.value)}
+              className="mt-1 block px-2 py-1.5 border border-line rounded-md text-xs"
+            >
+              {candidatosProteina.map((p) => (
+                <option key={p.linha_id} value={p.linha_id}>{p.nome}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="text-xs text-muted">
+          Fator de substituição (kg de proteína por kg de soja removida)
+          <input
+            type="number"
+            step="0.1"
+            value={fator}
+            onChange={(e) => setFator(e.target.value)}
+            className="mt-1 block w-28 px-2 py-1.5 border border-line rounded-md text-xs font-mono-num"
+          />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4 text-sm">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted">Sem soja (só {itemProteina.nome})</p>
+          <p className="font-mono-num font-medium mt-0.5">{formatBRL(cmvSemSoja.custoIngredientes)}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted">Com soja (atual)</p>
+          <p className="font-mono-num font-medium mt-0.5">{formatBRL(cmvComSoja.custoIngredientes)}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted">Economia com soja</p>
+          <p className="font-mono-num font-semibold mt-0.5 text-sage">{formatBRL(economia)}</p>
+        </div>
+      </div>
+
+      <p className="text-[10px] text-muted mt-3">
+        Fator 1 assume peso a peso (sem contar o rendimento da hidratação). Se a soja que você usa rende mais peso
+        depois de hidratada, aumenta o fator (ex: 1,5 ou 2) pra refletir isso na simulação.
+      </p>
     </div>
   );
 }
