@@ -905,44 +905,44 @@ function CamposProduto({ valores, onChange }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
       <CampoProduto label="Código">
-        <input value={valores.codigo} onChange={(e) => onChange({ ...valores, codigo: e.target.value })} className="input" />
+        <input value={valores.codigo} onChange={(e) => onChange({ ...valores, codigo: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
       </CampoProduto>
       <CampoProduto label="Nome do produto" className="col-span-2">
-        <input value={valores.nome_produto} onChange={(e) => onChange({ ...valores, nome_produto: e.target.value })} className="input" />
+        <input value={valores.nome_produto} onChange={(e) => onChange({ ...valores, nome_produto: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
       </CampoProduto>
       <CampoProduto label="Tipo">
-        <select value={valores.tipo_embalagem} onChange={(e) => onChange({ ...valores, tipo_embalagem: e.target.value })} className="input">
+        <select value={valores.tipo_embalagem} onChange={(e) => onChange({ ...valores, tipo_embalagem: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs">
           {TIPOS_EMBALAGEM.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
       </CampoProduto>
       <CampoProduto label="Código de barras (EAN)">
-        <input value={valores.codigo_barras} onChange={(e) => onChange({ ...valores, codigo_barras: e.target.value })} className="input" />
+        <input value={valores.codigo_barras} onChange={(e) => onChange({ ...valores, codigo_barras: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
       </CampoProduto>
       <CampoProduto label="NCM">
-        <input value={valores.ncm} onChange={(e) => onChange({ ...valores, ncm: e.target.value })} className="input" />
+        <input value={valores.ncm} onChange={(e) => onChange({ ...valores, ncm: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
       </CampoProduto>
       <CampoProduto label="CEST">
-        <input value={valores.cest} onChange={(e) => onChange({ ...valores, cest: e.target.value })} className="input" />
+        <input value={valores.cest} onChange={(e) => onChange({ ...valores, cest: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
       </CampoProduto>
       <CampoProduto label="Departamento">
-        <input value={valores.departamento} onChange={(e) => onChange({ ...valores, departamento: e.target.value })} className="input" />
+        <input value={valores.departamento} onChange={(e) => onChange({ ...valores, departamento: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
       </CampoProduto>
       <CampoProduto label="Seção">
-        <input value={valores.secao} onChange={(e) => onChange({ ...valores, secao: e.target.value })} className="input" />
+        <input value={valores.secao} onChange={(e) => onChange({ ...valores, secao: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
       </CampoProduto>
       <CampoProduto label="Categoria">
-        <input value={valores.categoria} onChange={(e) => onChange({ ...valores, categoria: e.target.value })} className="input" />
+        <input value={valores.categoria} onChange={(e) => onChange({ ...valores, categoria: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
       </CampoProduto>
       <CampoProduto label="Peso líquido (kg)">
-        <input type="number" step="0.001" value={valores.peso_liquido} onChange={(e) => onChange({ ...valores, peso_liquido: e.target.value })} className="input" />
+        <input type="number" step="0.001" value={valores.peso_liquido} onChange={(e) => onChange({ ...valores, peso_liquido: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
       </CampoProduto>
       <CampoProduto label="Peso bruto (kg)">
-        <input type="number" step="0.001" value={valores.peso_bruto} onChange={(e) => onChange({ ...valores, peso_bruto: e.target.value })} className="input" />
+        <input type="number" step="0.001" value={valores.peso_bruto} onChange={(e) => onChange({ ...valores, peso_bruto: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
       </CampoProduto>
       <CampoProduto label="Validade (dias)">
-        <input type="number" value={valores.validade_dias} onChange={(e) => onChange({ ...valores, validade_dias: e.target.value })} className="input" />
+        <input type="number" value={valores.validade_dias} onChange={(e) => onChange({ ...valores, validade_dias: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
       </CampoProduto>
     </div>
   );
@@ -1224,17 +1224,17 @@ function NutricionalProduto({ receitaId, produto }) {
       </p>
       <div className="grid grid-cols-2 gap-2 text-xs">
         <CampoProduto label="Apelido">
-          <input value={apelido} onChange={(e) => setApelido(e.target.value)} className="input" />
+          <input value={apelido} onChange={(e) => setApelido(e.target.value)} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
         </CampoProduto>
         <CampoProduto label="Porção (g)">
-          <input type="number" step="0.1" value={porcaoGramas} onChange={(e) => setPorcaoGramas(e.target.value)} className="input" />
+          <input type="number" step="0.1" value={porcaoGramas} onChange={(e) => setPorcaoGramas(e.target.value)} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
         </CampoProduto>
         <CampoProduto label="Medida caseira" className="col-span-2">
           <input
             value={medidaCaseira}
             onChange={(e) => setMedidaCaseira(e.target.value)}
             placeholder="Ex: 1 unidade (105g)"
-            className="input"
+            className="w-full px-2 py-1.5 border border-line rounded-md text-xs"
           />
         </CampoProduto>
       </div>
@@ -1281,16 +1281,16 @@ function NutricionalProduto({ receitaId, produto }) {
             {tabela.map((l, i) => (
               <tr key={i} className="border-b border-line/60 last:border-0">
                 <td className="py-1 pr-1">
-                  <input value={l.nutriente} onChange={(e) => alterarLinha(i, "nutriente", e.target.value)} className="input" />
+                  <input value={l.nutriente} onChange={(e) => alterarLinha(i, "nutriente", e.target.value)} className="w-full px-2 py-1 border border-line rounded-md text-xs" />
                 </td>
                 <td className="py-1 pr-1">
-                  <input value={l.qtd_comparativa} onChange={(e) => alterarLinha(i, "qtd_comparativa", e.target.value)} className="input w-16" />
+                  <input value={l.qtd_comparativa} onChange={(e) => alterarLinha(i, "qtd_comparativa", e.target.value)} className="w-16 px-2 py-1 border border-line rounded-md text-xs" />
                 </td>
                 <td className="py-1 pr-1">
-                  <input value={l.porcao} onChange={(e) => alterarLinha(i, "porcao", e.target.value)} className="input w-16" />
+                  <input value={l.porcao} onChange={(e) => alterarLinha(i, "porcao", e.target.value)} className="w-16 px-2 py-1 border border-line rounded-md text-xs" />
                 </td>
                 <td className="py-1 pr-1">
-                  <input value={l.vd_percentual} onChange={(e) => alterarLinha(i, "vd_percentual", e.target.value)} className="input w-14" />
+                  <input value={l.vd_percentual} onChange={(e) => alterarLinha(i, "vd_percentual", e.target.value)} className="w-14 px-2 py-1 border border-line rounded-md text-xs" />
                 </td>
                 <td className="py-1">
                   <button type="button" onClick={() => removerLinha(i)} className="text-muted hover:text-brick">
