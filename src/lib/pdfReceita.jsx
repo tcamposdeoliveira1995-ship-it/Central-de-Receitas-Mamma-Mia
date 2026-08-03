@@ -11,6 +11,7 @@ const CORES = {
   muted: "#7a7268",
   linha: "#e4dccf",
   fundoSuave: "#f7f1e7",
+  brick: "#a8452f",
 };
 
 const styles = StyleSheet.create({
@@ -106,6 +107,55 @@ const styles = StyleSheet.create({
   cmvLabel: { fontSize: 11, color: CORES.muted },
   cmvValor: { fontSize: 22, fontFamily: "Helvetica-Bold", color: CORES.sage },
   preparoTexto: { fontSize: 11.5, lineHeight: 1.9, color: CORES.texto },
+  produtoBox: {
+    marginTop: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: CORES.linha,
+    borderRadius: 6,
+  },
+  produtoHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 10,
+  },
+  produtoCodigo: { fontSize: 9.5, color: CORES.muted },
+  produtoNome: { fontSize: 13, fontFamily: "Helvetica-Bold", marginTop: 2 },
+  produtoTipoBadge: {
+    fontSize: 8.5,
+    color: CORES.sage,
+    backgroundColor: "#e7ecdf",
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  camposGrid: { flexDirection: "row", flexWrap: "wrap" },
+  campoBloco: { width: "25%", marginBottom: 9, paddingRight: 6 },
+  campoLabel: { fontSize: 7.5, color: CORES.muted, textTransform: "uppercase", letterSpacing: 0.4 },
+  campoValor: { fontSize: 10, marginTop: 2 },
+  apelidoTexto: { fontSize: 10, marginTop: 4, marginBottom: 2 },
+  ingredientesTexto: { fontSize: 9, lineHeight: 1.6, color: CORES.texto, marginTop: 6 },
+  alergicosTexto: { fontSize: 9, lineHeight: 1.6, color: CORES.brick, marginTop: 4 },
+  nutriTitulo: { fontSize: 9, fontFamily: "Helvetica-Bold", textTransform: "uppercase", color: CORES.muted, marginTop: 10, marginBottom: 6 },
+  nutriHeader: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: CORES.texto,
+    paddingBottom: 4,
+    marginBottom: 2,
+  },
+  nutriHeaderCel: { fontSize: 7.5, fontFamily: "Helvetica-Bold", textTransform: "uppercase", color: CORES.muted },
+  nutriLinha: {
+    flexDirection: "row",
+    borderBottomWidth: 0.5,
+    borderBottomColor: CORES.linha,
+    paddingVertical: 4,
+  },
+  nutriNome: { width: "40%", fontSize: 9.5 },
+  nutriQtd: { width: "20%", textAlign: "right", fontSize: 9.5 },
+  nutriPorcao: { width: "20%", textAlign: "right", fontSize: 9.5 },
+  nutriVd: { width: "20%", textAlign: "right", fontSize: 9.5 },
   rodape: {
     position: "absolute",
     bottom: 30,
@@ -188,6 +238,92 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
           <>
             <Text style={styles.secaoTitulo}>Modo de preparo</Text>
             <Text style={styles.preparoTexto}>{receita.modo_preparo}</Text>
+          </>
+        ) : null}
+
+        {(receita.produtos || []).length > 0 ? (
+          <>
+            <Text style={styles.secaoTitulo}>Produtos / Informação nutricional</Text>
+            {receita.produtos.map((produto) => (
+              <View key={produto.id} style={styles.produtoBox} wrap={false}>
+                <View style={styles.produtoHeaderRow}>
+                  <View>
+                    <Text style={styles.produtoCodigo}>{produto.codigo}</Text>
+                    <Text style={styles.produtoNome}>{produto.nome_produto}</Text>
+                  </View>
+                  {produto.tipo_embalagem ? <Text style={styles.produtoTipoBadge}>{produto.tipo_embalagem}</Text> : null}
+                </View>
+
+                <View style={styles.camposGrid}>
+                  <View style={styles.campoBloco}>
+                    <Text style={styles.campoLabel}>Código de barras</Text>
+                    <Text style={styles.campoValor}>{produto.codigo_barras || "—"}</Text>
+                  </View>
+                  <View style={styles.campoBloco}>
+                    <Text style={styles.campoLabel}>NCM</Text>
+                    <Text style={styles.campoValor}>{produto.ncm || "—"}</Text>
+                  </View>
+                  <View style={styles.campoBloco}>
+                    <Text style={styles.campoLabel}>CEST</Text>
+                    <Text style={styles.campoValor}>{produto.cest || "—"}</Text>
+                  </View>
+                  <View style={styles.campoBloco}>
+                    <Text style={styles.campoLabel}>Departamento</Text>
+                    <Text style={styles.campoValor}>{produto.departamento || "—"}</Text>
+                  </View>
+                  <View style={styles.campoBloco}>
+                    <Text style={styles.campoLabel}>Seção</Text>
+                    <Text style={styles.campoValor}>{produto.secao || "—"}</Text>
+                  </View>
+                  <View style={styles.campoBloco}>
+                    <Text style={styles.campoLabel}>Categoria</Text>
+                    <Text style={styles.campoValor}>{produto.categoria || "—"}</Text>
+                  </View>
+                  <View style={styles.campoBloco}>
+                    <Text style={styles.campoLabel}>Peso líquido</Text>
+                    <Text style={styles.campoValor}>{produto.peso_liquido ? `${formatNumber(produto.peso_liquido, 3)} kg` : "—"}</Text>
+                  </View>
+                  <View style={styles.campoBloco}>
+                    <Text style={styles.campoLabel}>Validade</Text>
+                    <Text style={styles.campoValor}>{produto.validade_dias ? `${produto.validade_dias} dias` : "—"}</Text>
+                  </View>
+                </View>
+
+                {produto.info_nutricional ? (
+                  <>
+                    {produto.info_nutricional.apelido ? (
+                      <Text style={styles.apelidoTexto}>Apelido: {produto.info_nutricional.apelido}</Text>
+                    ) : null}
+                    {produto.info_nutricional.ingredientes_texto ? (
+                      <Text style={styles.ingredientesTexto}>{produto.info_nutricional.ingredientes_texto}</Text>
+                    ) : null}
+                    {produto.info_nutricional.alergicos_texto ? (
+                      <Text style={styles.alergicosTexto}>{produto.info_nutricional.alergicos_texto}</Text>
+                    ) : null}
+                  </>
+                ) : null}
+
+                {(produto.tabela_nutricional || []).length > 0 ? (
+                  <>
+                    <Text style={styles.nutriTitulo}>Tabela nutricional</Text>
+                    <View style={styles.nutriHeader}>
+                      <Text style={[styles.nutriHeaderCel, styles.nutriNome]}>Nutriente</Text>
+                      <Text style={[styles.nutriHeaderCel, styles.nutriQtd]}>Qtd. comparativa</Text>
+                      <Text style={[styles.nutriHeaderCel, styles.nutriPorcao]}>Porção</Text>
+                      <Text style={[styles.nutriHeaderCel, styles.nutriVd]}>%VD</Text>
+                    </View>
+                    {produto.tabela_nutricional.map((n, i) => (
+                      <View style={styles.nutriLinha} key={i}>
+                        <Text style={styles.nutriNome}>{n.nutriente}</Text>
+                        <Text style={styles.nutriQtd}>{n.qtd_comparativa}</Text>
+                        <Text style={styles.nutriPorcao}>{n.porcao}</Text>
+                        <Text style={styles.nutriVd}>{n.vd_percentual || "-"}</Text>
+                      </View>
+                    ))}
+                  </>
+                ) : null}
+              </View>
+            ))}
           </>
         ) : null}
 
