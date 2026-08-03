@@ -327,7 +327,7 @@ function ReceitaDetalhe({ receita }) {
     atualizarItensReceita(receita.id, itensRef.current);
   }
 
-  async function baixarPdf() {
+  async function baixarPdf(mostrarCustos) {
     setGerandoPdf(true);
     try {
       const itensParaPdf = itens.map((item) => {
@@ -360,13 +360,15 @@ function ReceitaDetalhe({ receita }) {
           itens={itensParaPdf}
           cmv={cmv}
           quantidadeProducao={quantidadeProducao}
+          mostrarCustos={mostrarCustos}
         />
       ).toBlob();
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
+      const sufixo = mostrarCustos ? "" : "-sem-custo";
       a.href = url;
-      a.download = `${receita.codigo || "ficha"}-${receita.nome}.pdf`;
+      a.download = `${receita.codigo || "ficha"}-${receita.nome}${sufixo}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -491,12 +493,21 @@ function ReceitaDetalhe({ receita }) {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={baixarPdf}
+            onClick={() => baixarPdf(true)}
             disabled={gerandoPdf}
             className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line hover:bg-gold-soft/30 disabled:opacity-60"
           >
             {gerandoPdf ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
             Baixar PDF
+          </button>
+          <button
+            onClick={() => baixarPdf(false)}
+            disabled={gerandoPdf}
+            title="Gera o PDF sem as colunas de valor unitário/total, sem o resumo de custos e sem o CMV — pra enviar ao cliente"
+            className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line hover:bg-gold-soft/30 disabled:opacity-60"
+          >
+            {gerandoPdf ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+            PDF sem custo
           </button>
         </div>
       </div>
