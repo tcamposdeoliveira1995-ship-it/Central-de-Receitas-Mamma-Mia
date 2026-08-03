@@ -1145,6 +1145,39 @@ function linhasNutricionaisPadrao() {
   ].map((nutriente) => ({ nutriente, qtd_comparativa: "", porcao: "", vd_percentual: "" }));
 }
 
+// Selo de rotulagem nutricional frontal (RDC 429/2020 / IN 75/2020): a "lupa"
+// preta — um octógono preenchido de preto com uma alça saindo do canto
+// inferior direito, texto branco centralizado ("ALTO EM" + o nutriente em
+// até duas linhas). Desenhado com clip-path (octógono) + um retângulo
+// rotacionado (alça), sem depender de nenhuma imagem/asset externo.
+function LupaRotulagem({ linhas, title }) {
+  return (
+    <div className="relative" style={{ width: 60, height: 74 }} title={title}>
+      <div
+        className="absolute top-0 left-0 flex items-center justify-center bg-black"
+        style={{
+          width: 56,
+          height: 56,
+          clipPath: "polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)",
+        }}
+      >
+        <div className="text-center leading-tight px-1">
+          <p className="text-white text-[6.5px] font-bold uppercase">ALTO EM</p>
+          {linhas.map((linha, i) => (
+            <p key={i} className="text-white text-[8px] font-extrabold uppercase leading-[1.05]">
+              {linha}
+            </p>
+          ))}
+        </div>
+      </div>
+      <div
+        className="absolute bg-black rounded-sm"
+        style={{ width: 9, height: 24, right: 2, bottom: 0, transform: "rotate(45deg)" }}
+      />
+    </div>
+  );
+}
+
 function NutricionalProduto({ receitaId, produto, cmvUnitario }) {
   const { salvarInfoNutricional } = useStore();
   const info = produto.info_nutricional;
@@ -1213,19 +1246,16 @@ function NutricionalProduto({ receitaId, produto, cmvUnitario }) {
         {alertasRotulagem.length > 0 && (
           <div className="mt-2">
             <p className="text-[10px] uppercase tracking-wide text-muted mb-1.5">Rotulagem frontal obrigatória</p>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-4">
               {alertasRotulagem.map((a) => (
-                <div
+                <LupaRotulagem
                   key={a.tipo}
+                  linhas={a.linhas}
                   title={`${a.valor}${a.unidade} por 100g (limite legal: ${a.limite}${a.unidade})`}
-                  className="flex items-center gap-1.5 bg-black text-white text-[10px] font-bold px-2.5 py-1.5 rounded-full"
-                >
-                  <Search size={11} />
-                  {a.texto}
-                </div>
+                />
               ))}
             </div>
-            <p className="text-[10px] text-muted mt-1">
+            <p className="text-[10px] text-muted mt-2">
               Calculado por 100g conforme RDC 429/2020 — confira a arte final do selo antes de imprimir a embalagem.
             </p>
           </div>
