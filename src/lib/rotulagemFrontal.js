@@ -14,9 +14,9 @@
 // antes de ir pra impressão.
 
 const LIMITES_SOLIDO = {
-  acucar_adicionado: { limite: 15, unidade: "g", texto: "ALTO EM AÇÚCAR ADICIONADO" },
-  gordura_saturada: { limite: 6, unidade: "g", texto: "ALTO EM GORDURA SATURADA" },
-  sodio: { limite: 600, unidade: "mg", texto: "ALTO EM SÓDIO" },
+  acucar_adicionado: { limite: 15, unidade: "g", texto: "ALTO EM AÇÚCAR ADICIONADO", linhas: ["AÇÚCAR", "ADICIONADO"] },
+  gordura_saturada: { limite: 6, unidade: "g", texto: "ALTO EM GORDURA SATURADA", linhas: ["GORDURA", "SATURADA"] },
+  sodio: { limite: 600, unidade: "mg", texto: "ALTO EM SÓDIO", linhas: ["SÓDIO"] },
 };
 
 function encontrarValor(tabela, termos) {
@@ -50,6 +50,7 @@ export function calcularAlertasRotulagem(tabelaNutricional) {
     .map((c) => ({
       tipo: c.tipo,
       texto: LIMITES_SOLIDO[c.tipo].texto,
+      linhas: LIMITES_SOLIDO[c.tipo].linhas,
       valor: c.valor,
       limite: LIMITES_SOLIDO[c.tipo].limite,
       unidade: LIMITES_SOLIDO[c.tipo].unidade,
