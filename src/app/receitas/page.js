@@ -536,7 +536,7 @@ function ReceitaDetalhe({ receita }) {
         </div>
       </div>
 
-      <ProdutosSKU receitaId={receita.id} produtos={receita.produtos} />
+      <ProdutosSKU receitaId={receita.id} produtos={receita.produtos} cmvUnitario={cmv.cmvUnitario} />
 
       {/* Upload de ficha técnica em PDF */}
       <div className="mt-5 border border-dashed border-line rounded-lg p-4">
@@ -960,7 +960,7 @@ function CamposProduto({ valores, onChange }) {
   );
 }
 
-function ProdutosSKU({ receitaId, produtos }) {
+function ProdutosSKU({ receitaId, produtos, cmvUnitario }) {
   const { adicionarProduto } = useStore();
   const [adicionando, setAdicionando] = useState(false);
   const [novo, setNovo] = useState(produtoVazio());
@@ -1015,7 +1015,7 @@ function ProdutosSKU({ receitaId, produtos }) {
 
       <div className="mt-3 space-y-2">
         {(produtos || []).map((p) => (
-          <ProdutoItem key={p.id} receitaId={receitaId} produto={p} />
+          <ProdutoItem key={p.id} receitaId={receitaId} produto={p} cmvUnitario={cmvUnitario} />
         ))}
         {(!produtos || produtos.length === 0) && !adicionando && (
           <p className="text-xs text-muted text-center py-3">Nenhum produto/código cadastrado ainda pra essa receita.</p>
@@ -1025,7 +1025,7 @@ function ProdutosSKU({ receitaId, produtos }) {
   );
 }
 
-function ProdutoItem({ receitaId, produto }) {
+function ProdutoItem({ receitaId, produto, cmvUnitario }) {
   const { atualizarProduto, excluirProduto } = useStore();
   const [expandido, setExpandido] = useState(false);
   const [editando, setEditando] = useState(false);
@@ -1123,7 +1123,7 @@ function ProdutoItem({ receitaId, produto }) {
             </div>
           )}
 
-          <NutricionalProduto receitaId={receitaId} produto={produto} />
+          <NutricionalProduto receitaId={receitaId} produto={produto} cmvUnitario={cmvUnitario} />
         </div>
       )}
     </div>
@@ -1145,7 +1145,7 @@ function linhasNutricionaisPadrao() {
   ].map((nutriente) => ({ nutriente, qtd_comparativa: "", porcao: "", vd_percentual: "" }));
 }
 
-function NutricionalProduto({ receitaId, produto }) {
+function NutricionalProduto({ receitaId, produto, cmvUnitario }) {
   const { salvarInfoNutricional } = useStore();
   const info = produto.info_nutricional;
   const [editando, setEditando] = useState(false);
@@ -1158,6 +1158,14 @@ function NutricionalProduto({ receitaId, produto }) {
     produto.tabela_nutricional?.length ? produto.tabela_nutricional : linhasNutricionaisPadrao()
   );
   const alertasRotulagem = calcularAlertasRotulagem(produto.tabela_nutricional);
+
+  // Custo do pacote = CMV unitário da receita × Qtde. PCT (quantas unidades
+  // de produção entram nesse pacote). Não é salvo — recalcula toda vez que
+  // abre, porque o CMV pode mudar conforme o preço dos ingredientes muda.
+  const qtdePctSalva = parseFloat(info?.medida_caseira) || 0;
+  const custoPacote = cmvUnitario && qtdePctSalva ? cmvUnitario * qtdePctSalva : null;
+  const qtdePctEditando = parseFloat(medidaCaseira) || 0;
+  const custoPacoteEditando = cmvUnitario && qtdePctEditando ? cmvUnitario * qtdePctEditando : null;
 
   function alterarLinha(idx, campo, valor) {
     setTabela((prev) => prev.map((l, i) => (i === idx ? { ...l, [campo]: valor } : l)));
@@ -1228,6 +1236,18 @@ function NutricionalProduto({ receitaId, produto }) {
               <span className="text-muted">Apelido: </span>
               {info.apelido || "—"}
             </p>
+            {qtdePctSalva > 0 && (
+              <div className="flex items-center gap-2 bg-gold-soft/20 border border-gold/30 rounded-md px-2.5 py-1.5">
+                <span className="text-muted">Qtde. PCT: </span>
+                <span className="font-mono-num font-medium">{formatNumber(qtdePctSalva, 0)}</span>
+                {custoPacote !== null && (
+                  <>
+                    <span className="text-muted">· Custo do pacote (CMV unit. × Qtde. PCT):</span>
+                    <span className="font-mono-num font-semibold text-sage">{formatBRL(custoPacote)}</span>
+                  </>
+                )}
+              </div>
+            )}
             {info.ingredientes_texto && <p className="text-muted leading-relaxed">{info.ingredientes_texto}</p>}
             {info.alergicos_texto && <p className="text-brick leading-relaxed">{info.alergicos_texto}</p>}
             {produto.tabela_nutricional?.length > 0 && (
@@ -1274,11 +1294,21 @@ function NutricionalProduto({ receitaId, produto }) {
         </CampoProduto>
         <CampoProduto label="Qtde. PCT" className="col-span-2">
           <input
+            type="number"
+            step="1"
             value={medidaCaseira}
             onChange={(e) => setMedidaCaseira(e.target.value)}
-            placeholder="Ex: 1 unidade (105g)"
+            placeholder="Ex: 20"
             className="w-full px-2 py-1.5 border border-line rounded-md text-xs"
           />
+          <p className="text-[10px] text-muted mt-1">
+            Quantidade de unidades de produção (do CMV da receita) que entram nesse pacote.
+            {custoPacoteEditando !== null && (
+              <>
+                {" "}Custo do pacote: <span className="font-mono-num font-semibold text-sage">{formatBRL(custoPacoteEditando)}</span>
+              </>
+            )}
+          </p>
         </CampoProduto>
       </div>
       <label className="text-xs text-muted block">
