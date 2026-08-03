@@ -143,6 +143,7 @@ const styles = StyleSheet.create({
   campoLabel: { fontSize: 7.5, color: CORES.muted, textTransform: "uppercase", letterSpacing: 0.4 },
   campoValor: { fontSize: 10, marginTop: 2 },
   apelidoTexto: { fontSize: 10, marginTop: 4, marginBottom: 2 },
+  custoPacoteTexto: { fontSize: 9.5, marginTop: 2, marginBottom: 4, color: CORES.sage, fontFamily: "Helvetica-Bold" },
   ingredientesTexto: { fontSize: 9, lineHeight: 1.6, color: CORES.texto, marginTop: 6 },
   alergicosTexto: { fontSize: 9, lineHeight: 1.6, color: CORES.brick, marginTop: 4 },
   nutriTitulo: { fontSize: 9, fontFamily: "Helvetica-Bold", textTransform: "uppercase", color: CORES.muted, marginTop: 10, marginBottom: 6 },
@@ -324,6 +325,11 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
                   <>
                     {produto.info_nutricional.apelido ? (
                       <Text style={styles.apelidoTexto}>Apelido: {produto.info_nutricional.apelido}</Text>
+                    ) : null}
+                    {mostrarCustos && parseFloat(produto.info_nutricional.medida_caseira) > 0 ? (
+                      <Text style={styles.custoPacoteTexto}>
+                        Qtde. PCT: {parseFloat(produto.info_nutricional.medida_caseira)} · Custo do pacote (CMV unit. × Qtde. PCT): {formatBRL(cmv.cmvUnitario * parseFloat(produto.info_nutricional.medida_caseira))}
+                      </Text>
                     ) : null}
                     {produto.info_nutricional.ingredientes_texto ? (
                       <Text style={styles.ingredientesTexto}>{produto.info_nutricional.ingredientes_texto}</Text>
