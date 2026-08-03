@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Plus, Search, X, ChevronRight, ChevronDown, ChevronUp, Upload, FileText, Check, Loader2, Layers, Download, Flame, Package, Trash2, ClipboardList } from "lucide-react";
+import { calcularAlertasRotulagem } from "@/lib/rotulagemFrontal";
 import { pdf } from "@react-pdf/renderer";
 import { useStore } from "@/lib/store";
 import { calcularCMV, custoPorKgReceita, custoEfetivoIngrediente, converterQuantidade, formatBRL, formatNumber } from "@/lib/calc";
@@ -1018,6 +1019,7 @@ function ProdutoItem({ receitaId, produto }) {
   const [expandido, setExpandido] = useState(false);
   const [editando, setEditando] = useState(false);
   const [campos, setCampos] = useState(() => ({ ...produtoVazio(), ...produto }));
+  const qtdAlertasRotulagem = calcularAlertasRotulagem(produto.tabela_nutricional).length;
 
   async function salvarEdicao() {
     await atualizarProduto(receitaId, produto.id, {
@@ -1051,6 +1053,14 @@ function ProdutoItem({ receitaId, produto }) {
           <span className="font-medium">{produto.nome_produto}</span>
           {produto.tipo_embalagem && (
             <span className="text-xs px-1.5 py-0.5 rounded bg-sage-soft text-sage">{produto.tipo_embalagem}</span>
+          )}
+          {qtdAlertasRotulagem > 0 && (
+            <span
+              title="Este produto ultrapassa limites legais de rotulagem frontal"
+              className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-black text-white"
+            >
+              <Search size={10} /> {qtdAlertasRotulagem}
+            </span>
           )}
         </span>
         {expandido ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
@@ -1136,6 +1146,7 @@ function NutricionalProduto({ receitaId, produto }) {
   const [tabela, setTabela] = useState(() =>
     produto.tabela_nutricional?.length ? produto.tabela_nutricional : linhasNutricionaisPadrao()
   );
+  const alertasRotulagem = calcularAlertasRotulagem(produto.tabela_nutricional);
 
   function alterarLinha(idx, campo, valor) {
     setTabela((prev) => prev.map((l, i) => (i === idx ? { ...l, [campo]: valor } : l)));
@@ -1179,6 +1190,27 @@ function NutricionalProduto({ receitaId, produto }) {
             {info ? "Editar" : "Cadastrar"}
           </button>
         </div>
+
+        {alertasRotulagem.length > 0 && (
+          <div className="mt-2">
+            <p className="text-[10px] uppercase tracking-wide text-muted mb-1.5">Rotulagem frontal obrigatória</p>
+            <div className="flex flex-wrap gap-1.5">
+              {alertasRotulagem.map((a) => (
+                <div
+                  key={a.tipo}
+                  title={`${a.valor}${a.unidade} por 100g (limite legal: ${a.limite}${a.unidade})`}
+                  className="flex items-center gap-1.5 bg-black text-white text-[10px] font-bold px-2.5 py-1.5 rounded-full"
+                >
+                  <Search size={11} />
+                  {a.texto}
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted mt-1">
+              Calculado por 100g conforme RDC 429/2020 — confira a arte final do selo antes de imprimir a embalagem.
+            </p>
+          </div>
+        )}
         {info ? (
           <div className="mt-2 text-xs space-y-2">
             <p>
