@@ -1145,35 +1145,32 @@ function linhasNutricionaisPadrao() {
   ].map((nutriente) => ({ nutriente, qtd_comparativa: "", porcao: "", vd_percentual: "" }));
 }
 
-// Selo de rotulagem nutricional frontal (RDC 429/2020 / IN 75/2020): a "lupa"
-// preta — um octógono preenchido de preto com uma alça saindo do canto
-// inferior direito, texto branco centralizado ("ALTO EM" + o nutriente em
-// até duas linhas). Desenhado com clip-path (octógono) + um retângulo
-// rotacionado (alça), sem depender de nenhuma imagem/asset externo.
-function LupaRotulagem({ linhas, title }) {
+// Selo de rotulagem nutricional frontal (RDC 429/2020 / IN 75/2020): UM selo
+// só por produto, com o ícone da lupa + "ALTO EM" (em preto, fundo branco) e,
+// em seguida, um bloco preto com texto branco pra CADA nutriente que passou
+// do limite — tudo dentro de uma borda preta única (não uma lupa por
+// nutriente). É o layout "a"/"b"/"c" em linha horizontal do manual da Anvisa.
+function LupaRotulagem({ alertas }) {
+  if (!alertas || alertas.length === 0) return null;
   return (
-    <div className="relative" style={{ width: 60, height: 74 }} title={title}>
-      <div
-        className="absolute top-0 left-0 flex items-center justify-center bg-black"
-        style={{
-          width: 56,
-          height: 56,
-          clipPath: "polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)",
-        }}
-      >
-        <div className="text-center leading-tight px-1">
-          <p className="text-white text-[6.5px] font-bold uppercase">ALTO EM</p>
-          {linhas.map((linha, i) => (
-            <p key={i} className="text-white text-[8px] font-extrabold uppercase leading-[1.05]">
+    <div className="inline-flex items-stretch border-2 border-black rounded-md overflow-hidden bg-white">
+      <div className="flex items-center gap-1 px-2 py-1.5">
+        <Search size={15} className="text-black" strokeWidth={2.5} />
+        <span className="text-[9px] font-bold uppercase text-black leading-none whitespace-nowrap">ALTO EM</span>
+      </div>
+      {alertas.map((a) => (
+        <div
+          key={a.tipo}
+          title={`${a.valor}${a.unidade} por 100g (limite legal: ${a.limite}${a.unidade})`}
+          className="flex flex-col items-center justify-center bg-black px-2 py-1.5 border-l-2 border-black"
+        >
+          {a.linhas.map((linha, i) => (
+            <span key={i} className="text-white text-[9px] font-extrabold uppercase leading-tight whitespace-nowrap">
               {linha}
-            </p>
+            </span>
           ))}
         </div>
-      </div>
-      <div
-        className="absolute bg-black rounded-sm"
-        style={{ width: 9, height: 24, right: 2, bottom: 0, transform: "rotate(45deg)" }}
-      />
+      ))}
     </div>
   );
 }
@@ -1246,15 +1243,7 @@ function NutricionalProduto({ receitaId, produto, cmvUnitario }) {
         {alertasRotulagem.length > 0 && (
           <div className="mt-2">
             <p className="text-[10px] uppercase tracking-wide text-muted mb-1.5">Rotulagem frontal obrigatória</p>
-            <div className="flex flex-wrap gap-4">
-              {alertasRotulagem.map((a) => (
-                <LupaRotulagem
-                  key={a.tipo}
-                  linhas={a.linhas}
-                  title={`${a.valor}${a.unidade} por 100g (limite legal: ${a.limite}${a.unidade})`}
-                />
-              ))}
-            </div>
+            <LupaRotulagem alertas={alertasRotulagem} />
             <p className="text-[10px] text-muted mt-2">
               Calculado por 100g conforme RDC 429/2020 — confira a arte final do selo antes de imprimir a embalagem.
             </p>
