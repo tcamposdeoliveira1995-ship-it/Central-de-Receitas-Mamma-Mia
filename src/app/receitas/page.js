@@ -893,7 +893,7 @@ function produtoVazio() {
     peso_liquido: "",
     peso_bruto: "",
     validade_dias: "",
-    status: "ativo",
+    status: "rascunho",
   };
 }
 
@@ -915,9 +915,36 @@ function InfoLinha({ label, valor }) {
   );
 }
 
-function CamposProduto({ valores, onChange }) {
+// Campos obrigatórios pra um produto poder ser marcado como Ativo — evita
+// que um produto incompleto (sem EAN, NCM, nutricional etc.) vaze pra
+// produção/venda por engano.
+function camposFaltantesProduto(produto) {
+  const faltando = [];
+  if (!produto.codigo_barras) faltando.push("Código de barras");
+  if (!produto.ncm) faltando.push("NCM");
+  if (!produto.cest) faltando.push("CEST");
+  if (!produto.peso_liquido) faltando.push("Peso líquido");
+  if (!produto.validade_dias) faltando.push("Validade");
+  if (!produto.info_nutricional?.ingredientes_texto) faltando.push("Ingredientes (informação nutricional)");
+  if (!produto.tabela_nutricional?.length) faltando.push("Tabela nutricional");
+  return faltando;
+}
+
+function CamposProduto({ valores, onChange, mostrarStatus = false }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+      {mostrarStatus && (
+        <CampoProduto label="Status">
+          <select
+            value={valores.status || "rascunho"}
+            onChange={(e) => onChange({ ...valores, status: e.target.value })}
+            className="w-full px-2 py-1.5 border border-line rounded-md text-xs"
+          >
+            <option value="rascunho">Rascunho</option>
+            <option value="ativo">Ativo</option>
+          </select>
+        </CampoProduto>
+      )}
       <CampoProduto label="Código">
         <input value={valores.codigo} onChange={(e) => onChange({ ...valores, codigo: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
       </CampoProduto>
@@ -1182,6 +1209,13 @@ function ProdutoItem({ receitaId, produto, cmvUnitario, iniciarAberto, onDuplica
   const qtdAlertasRotulagem = calcularAlertasRotulagem(produto.tabela_nutricional).length;
 
   async function salvarEdicao() {
+    if (campos.status === "ativo") {
+      const faltando = camposFaltantesProduto({ ...produto, ...campos });
+      if (faltando.length > 0) {
+        alert(`Não dá pra marcar como Ativo — falta preencher: ${faltando.join(", ")}.`);
+        return;
+      }
+    }
     await atualizarProduto(receitaId, produto.id, {
       ...campos,
       peso_liquido: parseFloat(campos.peso_liquido) || 0,
@@ -1208,9 +1242,7 @@ function ProdutoItem({ receitaId, produto, cmvUnitario, iniciarAberto, onDuplica
       peso_liquido: produto.peso_liquido || 0,
       peso_bruto: produto.peso_bruto || 0,
       validade_dias: produto.validade_dias || "",
-      status: "ativo",
-    });
-    if (produto.info_nutricional) {
+      status: "rascunho",
       await salvarInfoNutricional(receitaId, clone.id, {
         apelido: produto.info_nutricional.apelido || "",
         ingredientes_texto: produto.info_nutricional.ingredientes_texto || "",
@@ -1233,6 +1265,9 @@ function ProdutoItem({ receitaId, produto, cmvUnitario, iniciarAberto, onDuplica
     await excluirProduto(receitaId, produto.id);
   }
 
+  const faltandoParaAtivo = camposFaltantesProduto(produto);
+  const ativoIncompleto = produto.status === "ativo" && faltandoParaAtivo.length > 0;
+
   return (
     <div className="border border-line rounded-lg overflow-hidden">
       <button
@@ -1240,12 +1275,27 @@ function ProdutoItem({ receitaId, produto, cmvUnitario, iniciarAberto, onDuplica
         onClick={() => setExpandido((v) => !v)}
         className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-gold-soft/20"
       >
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-2 flex-wrap">
           <Package size={14} className="text-sage" />
           <span className="font-mono-num text-xs text-muted">{produto.codigo}</span>
           <span className="font-medium">{produto.nome_produto}</span>
+          <span
+            className={`text-xs px-1.5 py-0.5 rounded ${
+              produto.status === "ativo" ? "bg-sage-soft text-sage" : "bg-gold-soft text-gold"
+            }`}
+          >
+            {produto.status === "ativo" ? "Ativo" : "Rascunho"}
+          </span>
           {produto.tipo_embalagem && (
             <span className="text-xs px-1.5 py-0.5 rounded bg-sage-soft text-sage">{produto.tipo_embalagem}</span>
+          )}
+          {ativoIncompleto && (
+            <span
+              title={`Marcado como Ativo mas falta: ${faltandoParaAtivo.join(", ")}`}
+              className="text-xs px-1.5 py-0.5 rounded bg-brick-soft text-brick font-medium"
+            >
+              ⚠ Incompleto
+            </span>
           )}
           {qtdAlertasRotulagem > 0 && (
             <span
@@ -1294,7 +1344,7 @@ function ProdutoItem({ receitaId, produto, cmvUnitario, iniciarAberto, onDuplica
           </div>
 
           {editando ? (
-            <CamposProduto valores={campos} onChange={setCampos} />
+            <CamposProduto valores={campos} onChange={setCampos} mostrarStatus />
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
               <InfoLinha label="Código de barras" valor={produto.codigo_barras} />
