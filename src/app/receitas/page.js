@@ -897,6 +897,21 @@ function produtoVazio() {
   };
 }
 
+// Monta o estado local do formulário só com os campos de sistema (código,
+// NCM etc.) — nunca com info_nutricional/tabela_nutricional. Se fizesse
+// `{ ...produtoVazio(), ...produto }` direto, esses dois campos vazavam pro
+// estado local e ficavam "congelados" no valor de quando o card foi aberto;
+// se a nutricional fosse salva depois, sem fechar/reabrir o card, a
+// validação de "Ativo" usava esse valor antigo e bloqueava por engano.
+function camposDeProduto(produto) {
+  const vazio = produtoVazio();
+  const campos = {};
+  Object.keys(vazio).forEach((chave) => {
+    campos[chave] = produto[chave] ?? vazio[chave];
+  });
+  return campos;
+}
+
 function CampoProduto({ label, className = "", children }) {
   return (
     <label className={`text-muted ${className}`}>
@@ -1205,7 +1220,7 @@ function ProdutoItem({ receitaId, produto, cmvUnitario, iniciarAberto, onDuplica
   const { atualizarProduto, excluirProduto, adicionarProduto, salvarInfoNutricional } = useStore();
   const [expandido, setExpandido] = useState(!!iniciarAberto);
   const [editando, setEditando] = useState(!!iniciarAberto);
-  const [campos, setCampos] = useState(() => ({ ...produtoVazio(), ...produto }));
+  const [campos, setCampos] = useState(() => camposDeProduto(produto));
   const qtdAlertasRotulagem = calcularAlertasRotulagem(produto.tabela_nutricional).length;
 
   async function salvarEdicao() {
@@ -1320,7 +1335,7 @@ function ProdutoItem({ receitaId, produto, cmvUnitario, iniciarAberto, onDuplica
                   type="button"
                   onClick={() => {
                     setEditando(false);
-                    setCampos({ ...produtoVazio(), ...produto });
+                    setCampos(camposDeProduto(produto));
                   }}
                   className="text-xs text-muted hover:text-brick"
                 >
