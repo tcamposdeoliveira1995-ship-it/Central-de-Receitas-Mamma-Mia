@@ -962,11 +962,139 @@ function CamposProduto({ valores, onChange }) {
   );
 }
 
+// Importação em lote: cola linhas copiadas do Excel/Google Sheets (formato
+// TSV — colunas separadas por Tab, que é exatamente o que Ctrl+C gera numa
+// planilha) numa ordem fixa de colunas, e cria um Produto por linha. Não
+// importa nutricional em lote — isso continua sendo cadastrado produto a
+// produto, já que costuma ser copiado do PDF do fornecedor.
+const COLUNAS_IMPORTACAO =
+  "Código · Nome do produto · Tipo (PCT/CX/UN/KG) · Código de barras · NCM · CEST · Departamento · Seção · Categoria · Peso líquido (kg) · Validade (dias)";
+
+function linhaImportadaParaProduto(linha) {
+  const colunas = linha.split("\t").map((c) => c.trim());
+  const [codigo, nome_produto, tipo_embalagem, codigo_barras, ncm, cest, departamento, secao, categoria, peso_liquido, validade_dias] = colunas;
+  const tipoNormalizado = (tipo_embalagem || "").toUpperCase();
+  return {
+    codigo: codigo || "",
+    nome_produto: nome_produto || "",
+    tipo_embalagem: TIPOS_EMBALAGEM.includes(tipoNormalizado) ? tipoNormalizado : "PCT",
+    codigo_barras: codigo_barras || "",
+    ncm: ncm || "",
+    cest: cest || "",
+    departamento: departamento || "",
+    secao: secao || "",
+    categoria: categoria || "",
+    peso_liquido: parseFloat((peso_liquido || "").replace(",", ".")) || 0,
+    peso_bruto: 0,
+    validade_dias: validade_dias || "",
+    status: "ativo",
+  };
+}
+
+function ImportarProdutosLote({ receitaId, onFechar }) {
+  const { adicionarProduto } = useStore();
+  const [texto, setTexto] = useState("");
+  const [importando, setImportando] = useState(false);
+  const [progresso, setProgresso] = useState(0);
+  const [erros, setErros] = useState([]);
+  const [concluido, setConcluido] = useState(false);
+
+  const linhas = useMemo(
+    () =>
+      texto
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map(linhaImportadaParaProduto),
+    [texto]
+  );
+  const linhasValidas = linhas.filter((l) => l.codigo && l.nome_produto);
+
+  async function importar() {
+    setImportando(true);
+    setErros([]);
+    setProgresso(0);
+    const falhas = [];
+    for (let i = 0; i < linhasValidas.length; i++) {
+      try {
+        await adicionarProduto(receitaId, linhasValidas[i]);
+      } catch (err) {
+        console.error(err);
+        falhas.push(`${linhasValidas[i].codigo} — ${linhasValidas[i].nome_produto}`);
+      }
+      setProgresso(i + 1);
+    }
+    setErros(falhas);
+    setImportando(false);
+    setConcluido(true);
+  }
+
+  return (
+    <div className="mt-3 bg-gold-soft/20 border border-gold/30 rounded-lg p-3">
+      <p className="text-xs text-muted mb-2">
+        Seleciona e copia (Ctrl+C) as linhas direto da sua planilha, nesta ordem de colunas, e cola aqui embaixo
+        (Ctrl+V):
+        <br />
+        <span className="font-mono-num text-[10.5px]">{COLUNAS_IMPORTACAO}</span>
+      </p>
+      <textarea
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
+        rows={6}
+        placeholder="Cole aqui, uma linha por produto..."
+        className="w-full px-2 py-1.5 border border-line rounded-md text-xs font-mono-num resize-y"
+        disabled={importando || concluido}
+      />
+
+      {linhas.length > 0 && !concluido && (
+        <p className="text-xs text-muted mt-2">
+          {linhasValidas.length} de {linhas.length} linha(s) reconhecida(s) (precisa ter código e nome preenchidos).
+        </p>
+      )}
+
+      {importando && (
+        <p className="text-xs text-sage mt-2 flex items-center gap-1.5">
+          <Loader2 size={12} className="animate-spin" /> Importando {progresso}/{linhasValidas.length}...
+        </p>
+      )}
+
+      {concluido && (
+        <div className="mt-2 text-xs">
+          <p className="text-sage">{linhasValidas.length - erros.length} produto(s) importado(s) com sucesso.</p>
+          {erros.length > 0 && <p className="text-brick mt-1">Falha em {erros.length}: {erros.join(", ")}</p>}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 mt-2">
+        <button
+          type="button"
+          onClick={() => onFechar?.()}
+          disabled={importando}
+          className="px-3 py-1.5 text-xs text-muted hover:text-brick"
+        >
+          {concluido ? "Fechar" : "Cancelar"}
+        </button>
+        {!concluido && (
+          <button
+            type="button"
+            onClick={importar}
+            disabled={importando || linhasValidas.length === 0}
+            className="px-3 py-1.5 text-xs bg-sage text-white rounded-md hover:opacity-90 disabled:opacity-60"
+          >
+            Importar {linhasValidas.length || ""} produto{linhasValidas.length === 1 ? "" : "s"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ProdutosSKU({ receitaId, produtos, cmvUnitario }) {
   const { adicionarProduto } = useStore();
   const [adicionando, setAdicionando] = useState(false);
   const [novo, setNovo] = useState(produtoVazio());
   const [duplicadoId, setDuplicadoId] = useState(null);
+  const [importando, setImportando] = useState(false);
 
   async function salvarNovoProduto() {
     if (!novo.codigo.trim() || !novo.nome_produto.trim()) return;
@@ -986,14 +1114,25 @@ function ProdutosSKU({ receitaId, produtos, cmvUnitario }) {
           <Package size={16} className="text-gold" />
           Produtos / Códigos (SKUs)
         </div>
-        <button
-          type="button"
-          onClick={() => setAdicionando((v) => !v)}
-          className="flex items-center gap-1.5 text-xs bg-sage-soft text-sage px-3 py-1.5 rounded-md hover:opacity-90"
-        >
-          <Plus size={13} /> Novo produto
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setImportando((v) => !v)}
+            className="flex items-center gap-1.5 text-xs border border-line px-3 py-1.5 rounded-md hover:bg-gold-soft/30"
+          >
+            <ClipboardList size={13} /> Importar planilha
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdicionando((v) => !v)}
+            className="flex items-center gap-1.5 text-xs bg-sage-soft text-sage px-3 py-1.5 rounded-md hover:opacity-90"
+          >
+            <Plus size={13} /> Novo produto
+          </button>
+        </div>
       </div>
+
+      {importando && <ImportarProdutosLote receitaId={receitaId} onFechar={() => setImportando(false)} />}
 
       {adicionando && (
         <div className="mt-3 bg-gold-soft/20 border border-gold/30 rounded-lg p-3">
