@@ -1243,6 +1243,8 @@ function ProdutoItem({ receitaId, produto, cmvUnitario, iniciarAberto, onDuplica
       peso_bruto: produto.peso_bruto || 0,
       validade_dias: produto.validade_dias || "",
       status: "rascunho",
+    });
+    if (produto.info_nutricional) {
       await salvarInfoNutricional(receitaId, clone.id, {
         apelido: produto.info_nutricional.apelido || "",
         ingredientes_texto: produto.info_nutricional.ingredientes_texto || "",
