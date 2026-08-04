@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Search, X, ChevronRight, ChevronDown, ChevronUp, Upload, FileText, Check, Loader2, Layers, Download, Flame, Package, Trash2, ClipboardList, PiggyBank } from "lucide-react";
+import { Plus, Search, X, ChevronRight, ChevronDown, ChevronUp, Upload, FileText, Check, Loader2, Layers, Download, Flame, Package, Trash2, ClipboardList, PiggyBank, Copy } from "lucide-react";
 import { calcularAlertasRotulagem } from "@/lib/rotulagemFrontal";
 import { pdf } from "@react-pdf/renderer";
 import { useStore } from "@/lib/store";
@@ -966,6 +966,7 @@ function ProdutosSKU({ receitaId, produtos, cmvUnitario }) {
   const { adicionarProduto } = useStore();
   const [adicionando, setAdicionando] = useState(false);
   const [novo, setNovo] = useState(produtoVazio());
+  const [duplicadoId, setDuplicadoId] = useState(null);
 
   async function salvarNovoProduto() {
     if (!novo.codigo.trim() || !novo.nome_produto.trim()) return;
@@ -1017,7 +1018,14 @@ function ProdutosSKU({ receitaId, produtos, cmvUnitario }) {
 
       <div className="mt-3 space-y-2">
         {(produtos || []).map((p) => (
-          <ProdutoItem key={p.id} receitaId={receitaId} produto={p} cmvUnitario={cmvUnitario} />
+          <ProdutoItem
+            key={p.id}
+            receitaId={receitaId}
+            produto={p}
+            cmvUnitario={cmvUnitario}
+            iniciarAberto={p.id === duplicadoId}
+            onDuplicado={setDuplicadoId}
+          />
         ))}
         {(!produtos || produtos.length === 0) && !adicionando && (
           <p className="text-xs text-muted text-center py-3">Nenhum produto/código cadastrado ainda pra essa receita.</p>
@@ -1027,10 +1035,10 @@ function ProdutosSKU({ receitaId, produtos, cmvUnitario }) {
   );
 }
 
-function ProdutoItem({ receitaId, produto, cmvUnitario }) {
-  const { atualizarProduto, excluirProduto } = useStore();
-  const [expandido, setExpandido] = useState(false);
-  const [editando, setEditando] = useState(false);
+function ProdutoItem({ receitaId, produto, cmvUnitario, iniciarAberto, onDuplicado }) {
+  const { atualizarProduto, excluirProduto, adicionarProduto, salvarInfoNutricional } = useStore();
+  const [expandido, setExpandido] = useState(!!iniciarAberto);
+  const [editando, setEditando] = useState(!!iniciarAberto);
   const [campos, setCampos] = useState(() => ({ ...produtoVazio(), ...produto }));
   const qtdAlertasRotulagem = calcularAlertasRotulagem(produto.tabela_nutricional).length;
 
@@ -1041,6 +1049,39 @@ function ProdutoItem({ receitaId, produto, cmvUnitario }) {
       peso_bruto: parseFloat(campos.peso_bruto) || 0,
     });
     setEditando(false);
+  }
+
+  // Clona os dados de sistema e a informação nutricional pro produto novo —
+  // menos código e código de barras, que ficam em branco porque são únicos
+  // por SKU e não fazem sentido duplicados. Abre o card novo já em edição
+  // pra ela só ajustar código, nome e o que mais mudar.
+  async function duplicar() {
+    const clone = await adicionarProduto(receitaId, {
+      codigo: "",
+      nome_produto: produto.nome_produto ? `${produto.nome_produto} (cópia)` : "",
+      tipo_embalagem: produto.tipo_embalagem || "PCT",
+      codigo_barras: "",
+      ncm: produto.ncm || "",
+      cest: produto.cest || "",
+      departamento: produto.departamento || "",
+      secao: produto.secao || "",
+      categoria: produto.categoria || "",
+      peso_liquido: produto.peso_liquido || 0,
+      peso_bruto: produto.peso_bruto || 0,
+      validade_dias: produto.validade_dias || "",
+      status: "ativo",
+    });
+    if (produto.info_nutricional) {
+      await salvarInfoNutricional(receitaId, clone.id, {
+        apelido: produto.info_nutricional.apelido || "",
+        ingredientes_texto: produto.info_nutricional.ingredientes_texto || "",
+        alergicos_texto: produto.info_nutricional.alergicos_texto || "",
+        porcao_gramas: produto.info_nutricional.porcao_gramas || 0,
+        medida_caseira: produto.info_nutricional.medida_caseira || "",
+        tabela: produto.tabela_nutricional || [],
+      });
+    }
+    onDuplicado?.(clone.id);
   }
 
   async function remover() {
@@ -1102,6 +1143,9 @@ function ProdutoItem({ receitaId, produto, cmvUnitario }) {
               <>
                 <button type="button" onClick={() => setEditando(true)} className="text-xs text-sage hover:underline">
                   Editar dados do produto
+                </button>
+                <button type="button" onClick={duplicar} className="text-xs text-sage hover:underline flex items-center gap-1">
+                  <Copy size={12} /> Duplicar
                 </button>
                 <button type="button" onClick={remover} className="text-xs text-brick hover:underline flex items-center gap-1">
                   <Trash2 size={12} /> Excluir
