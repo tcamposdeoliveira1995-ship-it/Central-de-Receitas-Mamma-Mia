@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { formatNumber } from "@/lib/calc";
+import { formatNumber, formatBRL } from "@/lib/calc";
 
 export default function ProducoesPage() {
-  const { producoes, receitas, adicionarProducao } = useStore();
+  const { producoes, receitas, funcionarios, adicionarProducao } = useStore();
   const [mostrarForm, setMostrarForm] = useState(false);
 
   const nomeReceita = (id) => receitas.find((r) => r.id === id)?.nome || "—";
@@ -32,6 +32,7 @@ export default function ProducoesPage() {
       {mostrarForm && (
         <NovaProducaoForm
           receitas={receitas}
+          funcionarios={funcionarios}
           onSalvar={async (dados) => {
             await adicionarProducao(dados);
             setMostrarForm(false);
@@ -53,6 +54,7 @@ export default function ProducoesPage() {
               <th className="px-5 py-3 font-medium text-right">Peso (kg)</th>
               <th className="px-5 py-3 font-medium text-right">Diferença</th>
               <th className="px-5 py-3 font-medium text-right">Perda</th>
+              <th className="px-5 py-3 font-medium text-right">MOD real (HHT)</th>
             </tr>
           </thead>
           <tbody>
@@ -60,6 +62,7 @@ export default function ProducoesPage() {
               const diff = (p.quantidade_real || 0) - (p.quantidade_teorica || 0);
               const positivo = diff >= 0;
               const perda = p.perda_percentual ?? (p.quantidade_teorica > 0 ? -(diff / p.quantidade_teorica) * 100 : 0);
+              const mod = p.mod || {};
               return (
                 <tr key={p.id} className="border-b border-line last:border-0">
                   <td className="px-5 py-3">{p.receita_nome || nomeReceita(p.receita_id)}</td>
@@ -76,12 +79,24 @@ export default function ProducoesPage() {
                   <td className={`px-5 py-3 text-right font-mono-num font-medium ${perda <= 0 ? "text-sage" : "text-brick"}`}>
                     {perda > 0 ? "+" : ""}{formatNumber(perda, 1)}%
                   </td>
+                  <td className="px-5 py-3 text-right">
+                    {mod.custo_real ? (
+                      <>
+                        <span className="font-mono-num font-medium text-gold">{formatBRL(mod.custo_real)}</span>
+                        <p className="text-xs text-muted mt-0.5">
+                          {mod.funcao_nome || "—"} · {formatNumber(mod.tempo_minutos_real, 0)} min · {mod.quantidade_pessoas} pessoa(s)
+                        </p>
+                      </>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
                 </tr>
               );
             })}
             {ordenadas.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-5 py-8 text-center text-muted text-sm">
+                <td colSpan={9} className="px-5 py-8 text-center text-muted text-sm">
                   Nenhuma produção registrada ainda.
                 </td>
               </tr>
@@ -94,7 +109,7 @@ export default function ProducoesPage() {
   );
 }
 
-function NovaProducaoForm({ receitas, onSalvar, onCancelar }) {
+function NovaProducaoForm({ receitas, funcionarios, onSalvar, onCancelar }) {
   const [receitaId, setReceitaId] = useState(receitas[0]?.id || "");
   const [data, setData] = useState(new Date().toISOString().slice(0, 10));
   const [lote, setLote] = useState("");
@@ -106,6 +121,12 @@ function NovaProducaoForm({ receitas, onSalvar, onCancelar }) {
   const receita = receitas.find((r) => r.id === receitaId);
   const teoricaDaReceita = receita?.rendimento?.quantidade_produzida || 0;
 
+  // MOD real — pré-preenche com a função/quantidade estimada da receita (se
+  // tiver), mas o tempo real fica em branco pra ser preenchido de verdade.
+  const [modFuncaoId, setModFuncaoId] = useState(receita?.mod?.funcao_id || "");
+  const [modQuantidadePessoas, setModQuantidadePessoas] = useState(receita?.mod?.quantidade_pessoas || "");
+  const [modTempoMinutosReal, setModTempoMinutosReal] = useState("");
+
   function num(v) {
     const n = parseFloat(String(v).replace(",", "."));
     return Number.isFinite(n) ? n : 0;
@@ -115,7 +136,13 @@ function NovaProducaoForm({ receitas, onSalvar, onCancelar }) {
     setReceitaId(id);
     const r = receitas.find((rr) => rr.id === id);
     setPesoUnitario(r?.peso_unitario || "");
+    setModFuncaoId(r?.mod?.funcao_id || "");
+    setModQuantidadePessoas(r?.mod?.quantidade_pessoas || "");
   }
+
+  const funcionariosAtivos = funcionarios.filter((f) => (f.status || "ativo") === "ativo");
+  const custoHoraMod = funcionarios.find((f) => f.id === modFuncaoId)?.custo_hora || 0;
+  const custoModPreview = custoHoraMod * num(modQuantidadePessoas) * (num(modTempoMinutosReal) / 60);
 
   const pesoMassaReal = num(quantidadeReal) * num(pesoUnitario);
 
@@ -130,6 +157,9 @@ function NovaProducaoForm({ receitas, onSalvar, onCancelar }) {
       quantidade_real: real,
       peso_unitario_kg: num(pesoUnitario),
       peso_massa_real: pesoMassaReal,
+      mod_funcao_id: modFuncaoId,
+      mod_quantidade_pessoas: num(modQuantidadePessoas),
+      mod_tempo_minutos_real: num(modTempoMinutosReal),
     };
     if (sobrescreverTeorica && quantidadeTeorica !== "") {
       dados.quantidade_teorica = parseFloat(String(quantidadeTeorica).replace(",", "."));
@@ -216,6 +246,49 @@ function NovaProducaoForm({ receitas, onSalvar, onCancelar }) {
             placeholder="Quantidade teórica pra esse lote"
             className="w-full mt-2 px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
           />
+        )}
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-line">
+        <p className="text-xs uppercase tracking-wide text-muted mb-2">Mão de obra real (HHT do lote)</p>
+        {funcionariosAtivos.length === 0 ? (
+          <p className="text-xs text-muted">Nenhuma função cadastrada em Funcionários ainda.</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Campo label="Função responsável">
+                <select
+                  value={modFuncaoId}
+                  onChange={(e) => setModFuncaoId(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded-md border border-line text-sm"
+                >
+                  <option value="">Selecione...</option>
+                  {funcionariosAtivos.map((f) => (
+                    <option key={f.id} value={f.id}>{f.funcao}</option>
+                  ))}
+                </select>
+              </Campo>
+              <Campo label="Quantidade de pessoas">
+                <input
+                  value={modQuantidadePessoas}
+                  onChange={(e) => setModQuantidadePessoas(e.target.value)}
+                  placeholder="Ex: 1"
+                  className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
+                />
+              </Campo>
+              <Campo label="Tempo real (minutos)">
+                <input
+                  value={modTempoMinutosReal}
+                  onChange={(e) => setModTempoMinutosReal(e.target.value)}
+                  placeholder="Ex: 480"
+                  className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
+                />
+              </Campo>
+            </div>
+            <div className="mt-2 text-xs text-muted">
+              Custo MOD real desse lote: <span className="font-mono-num font-medium text-gold">{formatBRL(custoModPreview)}</span>
+            </div>
+          </>
         )}
       </div>
 
