@@ -238,6 +238,12 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
   const celQtde = mostrarCustos ? styles.celQtde : styles.celQtdeSemCusto;
   const celUnid = mostrarCustos ? styles.celUnid : styles.celUnidSemCusto;
 
+  // Custo de mão de obra (MOD) estimado, cadastrado na receita — soma ao CMV
+  // de ingredientes/embalagem só na versão do PDF que mostra custos.
+  const custoMOD = receita.mod?.custo_estimado || 0;
+  const custoTotalComMOD = cmv.custoTotal + custoMOD;
+  const cmvUnitarioComMOD = cmv.cmvUnitario + (quantidadeProducao > 0 ? custoMOD / quantidadeProducao : 0);
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -289,14 +295,18 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
                 <Text style={styles.totalValor}>{formatBRL(cmv.custoEmbalagem)}</Text>
               </View>
               <View style={styles.totalBloco}>
-                <Text style={styles.totalLabel}>Total</Text>
-                <Text style={styles.totalValor}>{formatBRL(cmv.custoTotal)}</Text>
+                <Text style={styles.totalLabel}>Mão de obra</Text>
+                <Text style={styles.totalValor}>{formatBRL(custoMOD)}</Text>
+              </View>
+              <View style={styles.totalBloco}>
+                <Text style={styles.totalLabel}>Total (c/ MOD)</Text>
+                <Text style={styles.totalValor}>{formatBRL(custoTotalComMOD)}</Text>
               </View>
             </View>
 
             <View style={styles.cmvDestaque}>
-              <Text style={styles.cmvLabel}>CMV unitário (produção prevista: {formatNumber(quantidadeProducao, 0)} un)</Text>
-              <Text style={styles.cmvValor}>{formatBRL(cmv.cmvUnitario)}</Text>
+              <Text style={styles.cmvLabel}>CMV unitário c/ MOD (produção prevista: {formatNumber(quantidadeProducao, 0)} un)</Text>
+              <Text style={styles.cmvValor}>{formatBRL(cmvUnitarioComMOD)}</Text>
             </View>
           </>
         )}
@@ -363,7 +373,7 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
                     ) : null}
                     {mostrarCustos && parseFloat(produto.info_nutricional.medida_caseira) > 0 ? (
                       <Text style={styles.custoPacoteTexto}>
-                        Qtde. PCT: {parseFloat(produto.info_nutricional.medida_caseira)} · Custo do pacote (CMV unit. × Qtde. PCT): {formatBRL(cmv.cmvUnitario * parseFloat(produto.info_nutricional.medida_caseira))}
+                        Qtde. PCT: {parseFloat(produto.info_nutricional.medida_caseira)} · Custo do pacote (CMV unit. c/ MOD × Qtde. PCT): {formatBRL(cmvUnitarioComMOD * parseFloat(produto.info_nutricional.medida_caseira))}
                       </Text>
                     ) : null}
                     {produto.info_nutricional.ingredientes_texto ? (
