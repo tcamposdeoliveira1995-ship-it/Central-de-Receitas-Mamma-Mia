@@ -133,6 +133,9 @@ export const coccoes = [];
 // Módulo de Recheio Frio (embutidos) — sem dados de exemplo por enquanto.
 export const recheiosFrios = [];
 
+// Módulo de Funcionários (MOD/HHT) — sem dados de exemplo por enquanto.
+export const funcionarios = [];
+
 export const producoes = [
   {
     id: "prod-1",
