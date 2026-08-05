@@ -20,7 +20,7 @@ export default function CMVPage() {
           materiasPrimasById,
           receitasById,
         });
-        const custoMOD = r.mod?.custo_estimado || 0;
+        const custoMOD = r.mod?.custo_total || 0;
         const custoTotalComMOD = cmv.custoTotal + custoMOD;
         const cmvUnitarioComMOD = cmv.cmvUnitario + (quantidadeProducao > 0 ? custoMOD / quantidadeProducao : 0);
         return { ...r, cmv, quantidadeProducao, custoMOD, custoTotalComMOD, cmvUnitarioComMOD };
