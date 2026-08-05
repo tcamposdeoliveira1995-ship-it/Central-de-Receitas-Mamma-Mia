@@ -3,12 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Beef, BookOpen, Calculator, Percent, Factory, Flame, Snowflake, Menu, X, Users } from "lucide-react";
+import { LayoutGrid, Beef, BookOpen, Calculator, Percent, Factory, Flame, Snowflake, Menu, X, Users, Workflow } from "lucide-react";
 import { isDemoMode } from "@/lib/sheetsClient";
 
 const links = [
   { href: "/", label: "Dashboard", icon: LayoutGrid },
   { href: "/materias-primas", label: "Matérias-Primas", icon: Beef },
+  { href: "/setores", label: "Setores", icon: Workflow },
   { href: "/funcionarios", label: "Funcionários", icon: Users },
   { href: "/receitas", label: "Receitas", icon: BookOpen },
   { href: "/cmv", label: "CMV", icon: Calculator },
