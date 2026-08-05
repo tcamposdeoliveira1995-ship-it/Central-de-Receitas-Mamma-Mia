@@ -1,5 +1,5 @@
 // Dados de demonstração — usados apenas enquanto a planilha não está
-// conectada (ver src/lib/sheetsClient.js). Assim que a variável
+// conectada (ver src/lib/sheetsClient.js). Assim que a variável 
 // NEXT_PUBLIC_SHEETS_API_URL for configurada (URL do Apps Script Web App
 // gerado a partir de mamma-formula-appsscript/Code.gs), o sistema passa a
 // ler direto da planilha "Mamma Formula - Dados".
