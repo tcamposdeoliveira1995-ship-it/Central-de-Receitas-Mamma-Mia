@@ -198,7 +198,7 @@ export function StoreProvider({ children }) {
         itens: [],
         status: "ativa",
         versao_atual: 1,
-        mod: { funcao_id: "", quantidade_pessoas: 0, tempo_minutos: 0, custo_estimado: 0 },
+        mod: { itens: [], custo_total: 0 },
         ...criada,
       };
       setReceitas((prev) => [...prev, item]);
@@ -209,7 +209,7 @@ export function StoreProvider({ children }) {
       itens: [],
       status: "ativa",
       versao_atual: 1,
-      mod: { funcao_id: "", quantidade_pessoas: 0, tempo_minutos: 0, custo_estimado: 0 },
+      mod: { itens: [], custo_total: 0 },
       ...nova,
     };
     setReceitas((prev) => [...prev, item]);
@@ -284,38 +284,79 @@ export function StoreProvider({ children }) {
     [enfileirar]
   );
 
-  // ── MOD/HHT ESTIMADO DA RECEITA ───────────────────────────────────
-  // Recebe { funcao_id, quantidade_pessoas, tempo_minutos } e calcula/congela
-  // o custo estimado usando o custo/hora daquela função.
+  // ── MOD/HHT ESTIMADO DA RECEITA (lista de funções) ────────────────
+  // Recebe itens: [{ funcao_id, quantidade_pessoas, tempo_minutos }] — pode
+  // ter mais de uma função (ex: Auxiliar + Assistente de Produção na mesma
+  // receita). Substitui a lista inteira, igual atualizarItensReceita faz com
+  // os ingredientes.
+  const montarListaMOD = useCallback(
+    (itens, chaveTempo, chaveCusto) =>
+      (itens || []).map((item) => {
+        const custoHora = funcionariosById[item.funcao_id]?.custo_hora || 0;
+        const tempo = item[chaveTempo] || 0;
+        const custo = calcularCustoMOD(custoHora, item.quantidade_pessoas, tempo);
+        return {
+          funcao_id: item.funcao_id || "",
+          funcao_nome: funcionariosById[item.funcao_id]?.funcao || "",
+          quantidade_pessoas: item.quantidade_pessoas || 0,
+          [chaveTempo]: tempo,
+          [chaveCusto]: custo,
+        };
+      }),
+    [funcionariosById]
+  );
+
   const atualizarMODReceita = useCallback(
-    async (receitaId, dadosMOD) => {
-      const custoHora = funcionariosById[dadosMOD.funcao_id]?.custo_hora || 0;
-      const custoEstimado = calcularCustoMOD(custoHora, dadosMOD.quantidade_pessoas, dadosMOD.tempo_minutos);
-      const mod = {
-        funcao_id: dadosMOD.funcao_id || "",
-        funcao_nome: funcionariosById[dadosMOD.funcao_id]?.funcao || "",
-        quantidade_pessoas: dadosMOD.quantidade_pessoas || 0,
-        tempo_minutos: dadosMOD.tempo_minutos || 0,
-        custo_estimado: custoEstimado,
-      };
+    async (receitaId, itens) => {
+      const itensCalculados = montarListaMOD(itens, "tempo_minutos", "custo_estimado");
+      const custoTotal = itensCalculados.reduce((soma, i) => soma + (i.custo_estimado || 0), 0);
+      const mod = { itens: itensCalculados, custo_total: custoTotal };
       setReceitas((prev) => prev.map((r) => (r.id === receitaId ? { ...r, mod } : r)));
 
       if (!isDemoMode) {
         await enfileirar(`mod:${receitaId}`, () =>
-          postAction("updateMODReceita", {
+          postAction("updateModReceita", {
             receita_id: receitaId,
-            mod_funcao_id: dadosMOD.funcao_id || "",
-            mod_quantidade_pessoas: dadosMOD.quantidade_pessoas || 0,
-            mod_tempo_minutos: dadosMOD.tempo_minutos || 0,
+            itens: (itens || []).map((i) => ({
+              funcao_id: i.funcao_id || "",
+              quantidade_pessoas: i.quantidade_pessoas || 0,
+              tempo_minutos: i.tempo_minutos || 0,
+            })),
           })
         );
       }
     },
-    [enfileirar, funcionariosById]
+    [enfileirar, montarListaMOD]
+  );
+
+  // Mesma lógica pro MOD real de uma produção já existente (fora do momento
+  // de criação — ex: editar depois de registrada).
+  const atualizarMODProducao = useCallback(
+    async (producaoId, itens) => {
+      const itensCalculados = montarListaMOD(itens, "tempo_minutos_real", "custo_real");
+      const custoTotal = itensCalculados.reduce((soma, i) => soma + (i.custo_real || 0), 0);
+      const mod = { itens: itensCalculados, custo_total: custoTotal };
+      setProducoes((prev) => prev.map((p) => (p.id === producaoId ? { ...p, mod } : p)));
+
+      if (!isDemoMode) {
+        await enfileirar(`modproducao:${producaoId}`, () =>
+          postAction("updateModProducao", {
+            producao_id: producaoId,
+            itens: (itens || []).map((i) => ({
+              funcao_id: i.funcao_id || "",
+              quantidade_pessoas: i.quantidade_pessoas || 0,
+              tempo_minutos_real: i.tempo_minutos_real || 0,
+            })),
+          })
+        );
+      }
+    },
+    [enfileirar, montarListaMOD]
   );
 
   // Se quantidade_teorica não vier, usa o rendimento cadastrado da receita
   // (rendimento.quantidade_produzida), pra não precisar digitar de novo toda vez.
+  // dados.mod_itens: [{ funcao_id, quantidade_pessoas, tempo_minutos_real }].
   const adicionarProducao = useCallback(
     async (dados) => {
       const receita = receitasById[dados.receita_id];
@@ -333,18 +374,18 @@ export function StoreProvider({ children }) {
         quantidadeTeorica > 0
           ? ((quantidadeTeorica - dados.quantidade_real) / quantidadeTeorica) * 100
           : 0;
-      const custoHora = funcionariosById[dados.mod_funcao_id]?.custo_hora || 0;
-      const custoRealMOD = calcularCustoMOD(custoHora, dados.mod_quantidade_pessoas, dados.mod_tempo_minutos_real);
+      const itensMOD = montarListaMOD(dados.mod_itens, "tempo_minutos_real", "custo_real");
+      const custoTotalMOD = itensMOD.reduce((soma, i) => soma + (i.custo_real || 0), 0);
       const criada = {
         id: `prod-${Date.now()}`,
         ...payload,
         perda_percentual: perda,
-        mod_custo_real: custoRealMOD,
+        mod: { itens: itensMOD, custo_total: custoTotalMOD },
       };
       setProducoes((prev) => [...prev, criada]);
       return criada;
     },
-    [receitasById, funcionariosById]
+    [receitasById, montarListaMOD]
   );
 
   const adicionarCoccao = useCallback(async (dados) => {
@@ -552,6 +593,7 @@ export function StoreProvider({ children }) {
     atualizarRendimentoReceita,
     atualizarDetalhesReceita,
     atualizarMODReceita,
+    atualizarMODProducao,
     adicionarProducao,
     adicionarCoccao,
     adicionarRecheioFrio,
