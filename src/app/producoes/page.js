@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { formatNumber, formatBRL } from "@/lib/calc";
+
+function gerarLinhaId() {
+  return `linha-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export default function ProducoesPage() {
   const { producoes, receitas, funcionarios, adicionarProducao } = useStore();
@@ -62,7 +66,7 @@ export default function ProducoesPage() {
               const diff = (p.quantidade_real || 0) - (p.quantidade_teorica || 0);
               const positivo = diff >= 0;
               const perda = p.perda_percentual ?? (p.quantidade_teorica > 0 ? -(diff / p.quantidade_teorica) * 100 : 0);
-              const mod = p.mod || {};
+              const mod = p.mod || { itens: [], custo_total: 0 };
               return (
                 <tr key={p.id} className="border-b border-line last:border-0">
                   <td className="px-5 py-3">{p.receita_nome || nomeReceita(p.receita_id)}</td>
@@ -80,11 +84,11 @@ export default function ProducoesPage() {
                     {perda > 0 ? "+" : ""}{formatNumber(perda, 1)}%
                   </td>
                   <td className="px-5 py-3 text-right">
-                    {mod.custo_real ? (
+                    {mod.custo_total > 0 ? (
                       <>
-                        <span className="font-mono-num font-medium text-gold">{formatBRL(mod.custo_real)}</span>
+                        <span className="font-mono-num font-medium text-gold">{formatBRL(mod.custo_total)}</span>
                         <p className="text-xs text-muted mt-0.5">
-                          {mod.funcao_nome || "—"} · {formatNumber(mod.tempo_minutos_real, 0)} min · {mod.quantidade_pessoas} pessoa(s)
+                          {mod.itens.map((i) => `${i.funcao_nome || "—"} (${formatNumber(i.tempo_minutos_real, 0)} min · ${i.quantidade_pessoas}p)`).join(" + ")}
                         </p>
                       </>
                     ) : (
@@ -121,14 +125,20 @@ function NovaProducaoForm({ receitas, funcionarios, onSalvar, onCancelar }) {
   const receita = receitas.find((r) => r.id === receitaId);
   const teoricaDaReceita = receita?.rendimento?.quantidade_produzida || 0;
 
-  // MOD real — pré-preenche com a função/quantidade estimada da receita (se
-  // tiver), mas o tempo real fica em branco pra ser preenchido de verdade.
-  const [modFuncaoId, setModFuncaoId] = useState(receita?.mod?.funcao_id || "");
-  const [modQuantidadePessoas, setModQuantidadePessoas] = useState(receita?.mod?.quantidade_pessoas || "");
-  const [modTempoMinutosReal, setModTempoMinutosReal] = useState("");
+  // MOD real — pré-preenche a LISTA de funções com a mesma quantidade de
+  // pessoas estimada na receita (se tiver), mas o tempo real de cada linha
+  // fica em branco pra ser preenchido de verdade nesse lote.
+  const [modItens, setModItens] = useState(() =>
+    (receita?.mod?.itens || []).map((i) => ({
+      linha_id: gerarLinhaId(),
+      funcao_id: i.funcao_id,
+      quantidade_pessoas: i.quantidade_pessoas,
+      tempo_minutos_real: "",
+    }))
+  );
 
   function num(v) {
-    const n = parseFloat(String(v).replace(",", "."));
+    const n = parseFloat(String(v).replace(/\./g, "").replace(",", "."));
     return Number.isFinite(n) ? n : 0;
   }
 
@@ -136,13 +146,33 @@ function NovaProducaoForm({ receitas, funcionarios, onSalvar, onCancelar }) {
     setReceitaId(id);
     const r = receitas.find((rr) => rr.id === id);
     setPesoUnitario(r?.peso_unitario || "");
-    setModFuncaoId(r?.mod?.funcao_id || "");
-    setModQuantidadePessoas(r?.mod?.quantidade_pessoas || "");
+    setModItens(
+      (r?.mod?.itens || []).map((i) => ({
+        linha_id: gerarLinhaId(),
+        funcao_id: i.funcao_id,
+        quantidade_pessoas: i.quantidade_pessoas,
+        tempo_minutos_real: "",
+      }))
+    );
+  }
+
+  function adicionarLinhaMOD() {
+    setModItens((prev) => [...prev, { linha_id: gerarLinhaId(), funcao_id: "", quantidade_pessoas: 1, tempo_minutos_real: "" }]);
+  }
+
+  function alterarLinhaMOD(linhaId, campo, valor) {
+    setModItens((prev) => prev.map((i) => (i.linha_id === linhaId ? { ...i, [campo]: valor } : i)));
+  }
+
+  function removerLinhaMOD(linhaId) {
+    setModItens((prev) => prev.filter((i) => i.linha_id !== linhaId));
   }
 
   const funcionariosAtivos = funcionarios.filter((f) => (f.status || "ativo") === "ativo");
-  const custoHoraMod = funcionarios.find((f) => f.id === modFuncaoId)?.custo_hora || 0;
-  const custoModPreview = custoHoraMod * num(modQuantidadePessoas) * (num(modTempoMinutosReal) / 60);
+  const custoModPreviewTotal = modItens.reduce((soma, item) => {
+    const custoHora = funcionarios.find((f) => f.id === item.funcao_id)?.custo_hora || 0;
+    return soma + custoHora * num(item.quantidade_pessoas) * (num(item.tempo_minutos_real) / 60);
+  }, 0);
 
   const pesoMassaReal = num(quantidadeReal) * num(pesoUnitario);
 
@@ -157,9 +187,11 @@ function NovaProducaoForm({ receitas, funcionarios, onSalvar, onCancelar }) {
       quantidade_real: real,
       peso_unitario_kg: num(pesoUnitario),
       peso_massa_real: pesoMassaReal,
-      mod_funcao_id: modFuncaoId,
-      mod_quantidade_pessoas: num(modQuantidadePessoas),
-      mod_tempo_minutos_real: num(modTempoMinutosReal),
+      mod_itens: modItens.map((i) => ({
+        funcao_id: i.funcao_id,
+        quantidade_pessoas: num(i.quantidade_pessoas),
+        tempo_minutos_real: num(i.tempo_minutos_real),
+      })),
     };
     if (sobrescreverTeorica && quantidadeTeorica !== "") {
       dados.quantidade_teorica = parseFloat(String(quantidadeTeorica).replace(",", "."));
@@ -250,43 +282,68 @@ function NovaProducaoForm({ receitas, funcionarios, onSalvar, onCancelar }) {
       </div>
 
       <div className="mt-3 pt-3 border-t border-line">
-        <p className="text-xs uppercase tracking-wide text-muted mb-2">Mão de obra real (HHT do lote)</p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs uppercase tracking-wide text-muted">Mão de obra real (HHT do lote)</p>
+          {funcionariosAtivos.length > 0 && (
+            <button
+              type="button"
+              onClick={adicionarLinhaMOD}
+              className="text-xs flex items-center gap-1 text-sage hover:underline"
+            >
+              <Plus size={13} /> Adicionar função
+            </button>
+          )}
+        </div>
         {funcionariosAtivos.length === 0 ? (
           <p className="text-xs text-muted">Nenhuma função cadastrada em Funcionários ainda.</p>
+        ) : modItens.length === 0 ? (
+          <p className="text-xs text-muted">Nenhuma função adicionada ainda. Clique em "Adicionar função" acima.</p>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Campo label="Função responsável">
-                <select
-                  value={modFuncaoId}
-                  onChange={(e) => setModFuncaoId(e.target.value)}
-                  className="w-full px-2 py-1.5 rounded-md border border-line text-sm"
-                >
-                  <option value="">Selecione...</option>
-                  {funcionariosAtivos.map((f) => (
-                    <option key={f.id} value={f.id}>{f.funcao}</option>
-                  ))}
-                </select>
-              </Campo>
-              <Campo label="Quantidade de pessoas">
-                <input
-                  value={modQuantidadePessoas}
-                  onChange={(e) => setModQuantidadePessoas(e.target.value)}
-                  placeholder="Ex: 1"
-                  className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
-                />
-              </Campo>
-              <Campo label="Tempo real (minutos)">
-                <input
-                  value={modTempoMinutosReal}
-                  onChange={(e) => setModTempoMinutosReal(e.target.value)}
-                  placeholder="Ex: 480"
-                  className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
-                />
-              </Campo>
+            <div className="space-y-2">
+              {modItens.map((item) => (
+                <div key={item.linha_id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_auto] gap-2 items-end">
+                  <Campo label="Função responsável">
+                    <select
+                      value={item.funcao_id}
+                      onChange={(e) => alterarLinhaMOD(item.linha_id, "funcao_id", e.target.value)}
+                      className="w-full px-2 py-1.5 rounded-md border border-line text-sm"
+                    >
+                      <option value="">Selecione...</option>
+                      {funcionariosAtivos.map((f) => (
+                        <option key={f.id} value={f.id}>{f.funcao}</option>
+                      ))}
+                    </select>
+                  </Campo>
+                  <Campo label="Quantidade de pessoas">
+                    <input
+                      value={item.quantidade_pessoas}
+                      onChange={(e) => alterarLinhaMOD(item.linha_id, "quantidade_pessoas", e.target.value)}
+                      placeholder="Ex: 1"
+                      className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
+                    />
+                  </Campo>
+                  <Campo label="Tempo real (minutos)">
+                    <input
+                      value={item.tempo_minutos_real}
+                      onChange={(e) => alterarLinhaMOD(item.linha_id, "tempo_minutos_real", e.target.value)}
+                      placeholder="Ex: 480"
+                      className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
+                    />
+                  </Campo>
+                  <button
+                    type="button"
+                    onClick={() => removerLinhaMOD(item.linha_id)}
+                    className="text-muted hover:text-brick pb-2.5"
+                    aria-label="Remover"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
             </div>
             <div className="mt-2 text-xs text-muted">
-              Custo MOD real desse lote: <span className="font-mono-num font-medium text-gold">{formatBRL(custoModPreview)}</span>
+              Custo MOD real desse lote: <span className="font-mono-num font-medium text-gold">{formatBRL(custoModPreviewTotal)}</span>
             </div>
           </>
         )}
