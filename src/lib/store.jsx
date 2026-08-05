@@ -25,6 +25,7 @@ function calcularCustoMOD(custoHora, quantidadePessoas, tempoMinutos) {
 export function StoreProvider({ children }) {
   const [categorias, setCategorias] = useState(isDemoMode ? seed.categorias : []);
   const [fornecedores, setFornecedores] = useState(isDemoMode ? seed.fornecedores : []);
+  const [setores, setSetores] = useState(isDemoMode ? (seed.setores || []) : []);
   const [funcionarios, setFuncionarios] = useState(isDemoMode ? (seed.funcionarios || []) : []);
   const [materiasPrimas, setMateriasPrimas] = useState(isDemoMode ? seed.materiasPrimas : []);
   const [receitas, setReceitas] = useState(isDemoMode ? seed.receitas : []);
@@ -59,6 +60,7 @@ export function StoreProvider({ children }) {
       if (cancelado) return;
       if (dados.categorias) setCategorias(dados.categorias);
       if (dados.fornecedores) setFornecedores(dados.fornecedores);
+      if (dados.setores) setSetores(dados.setores);
       if (dados.funcionarios) setFuncionarios(dados.funcionarios);
       if (dados.materiasPrimas) setMateriasPrimas(dados.materiasPrimas);
       if (dados.receitas) setReceitas(dados.receitas);
@@ -95,6 +97,12 @@ export function StoreProvider({ children }) {
     for (const f of funcionarios) map[f.id] = f;
     return map;
   }, [funcionarios]);
+
+  const setoresById = useMemo(() => {
+    const map = {};
+    for (const s of setores) map[s.id] = s;
+    return map;
+  }, [setores]);
 
   const atualizarPrecoMateriaPrima = useCallback(
     async (id, novoPreco) => {
@@ -285,10 +293,10 @@ export function StoreProvider({ children }) {
   );
 
   // ── MOD/HHT ESTIMADO DA RECEITA (lista de funções) ────────────────
-  // Recebe itens: [{ funcao_id, quantidade_pessoas, tempo_minutos }] — pode
-  // ter mais de uma função (ex: Auxiliar + Assistente de Produção na mesma
-  // receita). Substitui a lista inteira, igual atualizarItensReceita faz com
-  // os ingredientes.
+  // Recebe itens: [{ setor_id, funcao_id, quantidade_pessoas, tempo_minutos }]
+  // — pode ter mais de uma função/setor (ex: Auxiliar na Expedição + Assistente
+  // na Produção). Substitui a lista inteira, igual atualizarItensReceita faz
+  // com os ingredientes.
   const montarListaMOD = useCallback(
     (itens, chaveTempo, chaveCusto) =>
       (itens || []).map((item) => {
@@ -296,6 +304,8 @@ export function StoreProvider({ children }) {
         const tempo = item[chaveTempo] || 0;
         const custo = calcularCustoMOD(custoHora, item.quantidade_pessoas, tempo);
         return {
+          setor_id: item.setor_id || "",
+          setor_nome: setoresById[item.setor_id]?.nome || "",
           funcao_id: item.funcao_id || "",
           funcao_nome: funcionariosById[item.funcao_id]?.funcao || "",
           quantidade_pessoas: item.quantidade_pessoas || 0,
@@ -303,7 +313,7 @@ export function StoreProvider({ children }) {
           [chaveCusto]: custo,
         };
       }),
-    [funcionariosById]
+    [funcionariosById, setoresById]
   );
 
   const atualizarMODReceita = useCallback(
@@ -318,6 +328,7 @@ export function StoreProvider({ children }) {
           postAction("updateModReceita", {
             receita_id: receitaId,
             itens: (itens || []).map((i) => ({
+              setor_id: i.setor_id || "",
               funcao_id: i.funcao_id || "",
               quantidade_pessoas: i.quantidade_pessoas || 0,
               tempo_minutos: i.tempo_minutos || 0,
@@ -343,6 +354,7 @@ export function StoreProvider({ children }) {
           postAction("updateModProducao", {
             producao_id: producaoId,
             itens: (itens || []).map((i) => ({
+              setor_id: i.setor_id || "",
               funcao_id: i.funcao_id || "",
               quantidade_pessoas: i.quantidade_pessoas || 0,
               tempo_minutos_real: i.tempo_minutos_real || 0,
@@ -530,6 +542,35 @@ export function StoreProvider({ children }) {
     [enfileirar]
   );
 
+  // ── SETORES (etapa do processo: Produção, Forno/Congelamento, Expedição etc.) ──
+  // Cadastro livre — usado pra classificar cada linha de MOD por onde no
+  // processo aquele trabalho acontece.
+
+  const adicionarSetor = useCallback(async (dados) => {
+    if (!isDemoMode) {
+      const criado = await postAction("addSetor", dados);
+      setSetores((prev) => [...prev, criado]);
+      return criado;
+    }
+    const criado = { id: `setor-${Date.now()}`, status: "ativo", ...dados };
+    setSetores((prev) => [...prev, criado]);
+    return criado;
+  }, []);
+
+  const atualizarSetor = useCallback(async (id, dados) => {
+    setSetores((prev) => prev.map((s) => (s.id === id ? { ...s, ...dados } : s)));
+    if (!isDemoMode) {
+      await postAction("updateSetor", { id, ...dados });
+    }
+  }, []);
+
+  const excluirSetor = useCallback(async (id) => {
+    setSetores((prev) => prev.filter((s) => s.id !== id));
+    if (!isDemoMode) {
+      await postAction("deleteSetor", { id });
+    }
+  }, []);
+
   // ── FUNCIONÁRIOS / FUNÇÕES (base do MOD/HHT) ──────────────────────
   // Cada registro é uma "função" (cargo): salário, carga horária semanal e
   // quantidade de funcionários naquela função. O custo/hora é calculado e
@@ -574,6 +615,8 @@ export function StoreProvider({ children }) {
     loading,
     categorias,
     fornecedores,
+    setores,
+    setoresById,
     funcionarios,
     funcionariosById,
     materiasPrimas,
@@ -602,6 +645,9 @@ export function StoreProvider({ children }) {
     excluirProduto,
     salvarInfoNutricional,
     salvarNutricionalMateriaPrima,
+    adicionarSetor,
+    atualizarSetor,
+    excluirSetor,
     adicionarFuncionario,
     atualizarFuncionario,
     excluirFuncionario,
