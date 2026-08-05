@@ -7,9 +7,25 @@ import * as seed from "./seed";
 
 const StoreContext = createContext(null);
 
+// Usado só no modo demonstração, pra espelhar o mesmo cálculo que o Code.gs
+// faz no backend real (salário mensal + carga horária semanal → custo/hora).
+const SEMANAS_POR_MES = 52 / 12;
+
+function calcularCustoHora(salarioMensal, cargaHorariaSemanal) {
+  if (!cargaHorariaSemanal || cargaHorariaSemanal <= 0) return 0;
+  const horasMensais = cargaHorariaSemanal * SEMANAS_POR_MES;
+  if (!horasMensais) return 0;
+  return (salarioMensal || 0) / horasMensais;
+}
+
+function calcularCustoMOD(custoHora, quantidadePessoas, tempoMinutos) {
+  return (custoHora || 0) * (quantidadePessoas || 0) * ((tempoMinutos || 0) / 60);
+}
+
 export function StoreProvider({ children }) {
   const [categorias, setCategorias] = useState(isDemoMode ? seed.categorias : []);
   const [fornecedores, setFornecedores] = useState(isDemoMode ? seed.fornecedores : []);
+  const [funcionarios, setFuncionarios] = useState(isDemoMode ? (seed.funcionarios || []) : []);
   const [materiasPrimas, setMateriasPrimas] = useState(isDemoMode ? seed.materiasPrimas : []);
   const [receitas, setReceitas] = useState(isDemoMode ? seed.receitas : []);
   const [producoes, setProducoes] = useState(isDemoMode ? seed.producoes : []);
@@ -43,6 +59,7 @@ export function StoreProvider({ children }) {
       if (cancelado) return;
       if (dados.categorias) setCategorias(dados.categorias);
       if (dados.fornecedores) setFornecedores(dados.fornecedores);
+      if (dados.funcionarios) setFuncionarios(dados.funcionarios);
       if (dados.materiasPrimas) setMateriasPrimas(dados.materiasPrimas);
       if (dados.receitas) setReceitas(dados.receitas);
       if (dados.producoes) setProducoes(dados.producoes);
@@ -72,6 +89,12 @@ export function StoreProvider({ children }) {
     for (const r of receitas) map[r.id] = r;
     return map;
   }, [receitas]);
+
+  const funcionariosById = useMemo(() => {
+    const map = {};
+    for (const f of funcionarios) map[f.id] = f;
+    return map;
+  }, [funcionarios]);
 
   const atualizarPrecoMateriaPrima = useCallback(
     async (id, novoPreco) => {
@@ -171,11 +194,24 @@ export function StoreProvider({ children }) {
   const adicionarReceita = useCallback(async (nova) => {
     if (!isDemoMode) {
       const criada = await postAction("addReceita", nova);
-      const item = { itens: [], status: "ativa", versao_atual: 1, ...criada };
+      const item = {
+        itens: [],
+        status: "ativa",
+        versao_atual: 1,
+        mod: { funcao_id: "", quantidade_pessoas: 0, tempo_minutos: 0, custo_estimado: 0 },
+        ...criada,
+      };
       setReceitas((prev) => [...prev, item]);
       return item;
     }
-    const item = { id: `rec-${Date.now()}`, itens: [], status: "ativa", versao_atual: 1, ...nova };
+    const item = {
+      id: `rec-${Date.now()}`,
+      itens: [],
+      status: "ativa",
+      versao_atual: 1,
+      mod: { funcao_id: "", quantidade_pessoas: 0, tempo_minutos: 0, custo_estimado: 0 },
+      ...nova,
+    };
     setReceitas((prev) => [...prev, item]);
     return item;
   }, []);
@@ -248,6 +284,36 @@ export function StoreProvider({ children }) {
     [enfileirar]
   );
 
+  // ── MOD/HHT ESTIMADO DA RECEITA ───────────────────────────────────
+  // Recebe { funcao_id, quantidade_pessoas, tempo_minutos } e calcula/congela
+  // o custo estimado usando o custo/hora daquela função.
+  const atualizarMODReceita = useCallback(
+    async (receitaId, dadosMOD) => {
+      const custoHora = funcionariosById[dadosMOD.funcao_id]?.custo_hora || 0;
+      const custoEstimado = calcularCustoMOD(custoHora, dadosMOD.quantidade_pessoas, dadosMOD.tempo_minutos);
+      const mod = {
+        funcao_id: dadosMOD.funcao_id || "",
+        funcao_nome: funcionariosById[dadosMOD.funcao_id]?.funcao || "",
+        quantidade_pessoas: dadosMOD.quantidade_pessoas || 0,
+        tempo_minutos: dadosMOD.tempo_minutos || 0,
+        custo_estimado: custoEstimado,
+      };
+      setReceitas((prev) => prev.map((r) => (r.id === receitaId ? { ...r, mod } : r)));
+
+      if (!isDemoMode) {
+        await enfileirar(`mod:${receitaId}`, () =>
+          postAction("updateMODReceita", {
+            receita_id: receitaId,
+            mod_funcao_id: dadosMOD.funcao_id || "",
+            mod_quantidade_pessoas: dadosMOD.quantidade_pessoas || 0,
+            mod_tempo_minutos: dadosMOD.tempo_minutos || 0,
+          })
+        );
+      }
+    },
+    [enfileirar, funcionariosById]
+  );
+
   // Se quantidade_teorica não vier, usa o rendimento cadastrado da receita
   // (rendimento.quantidade_produzida), pra não precisar digitar de novo toda vez.
   const adicionarProducao = useCallback(
@@ -267,15 +333,18 @@ export function StoreProvider({ children }) {
         quantidadeTeorica > 0
           ? ((quantidadeTeorica - dados.quantidade_real) / quantidadeTeorica) * 100
           : 0;
+      const custoHora = funcionariosById[dados.mod_funcao_id]?.custo_hora || 0;
+      const custoRealMOD = calcularCustoMOD(custoHora, dados.mod_quantidade_pessoas, dados.mod_tempo_minutos_real);
       const criada = {
         id: `prod-${Date.now()}`,
         ...payload,
         perda_percentual: perda,
+        mod_custo_real: custoRealMOD,
       };
       setProducoes((prev) => [...prev, criada]);
       return criada;
     },
-    [receitasById]
+    [receitasById, funcionariosById]
   );
 
   const adicionarCoccao = useCallback(async (dados) => {
@@ -420,10 +489,52 @@ export function StoreProvider({ children }) {
     [enfileirar]
   );
 
+  // ── FUNCIONÁRIOS / FUNÇÕES (base do MOD/HHT) ──────────────────────
+  // Cada registro é uma "função" (cargo): salário, carga horária semanal e
+  // quantidade de funcionários naquela função. O custo/hora é calculado e
+  // aplicado igual pra todos os que exercem a mesma função.
+
+  const adicionarFuncionario = useCallback(async (dados) => {
+    if (!isDemoMode) {
+      const criado = await postAction("addFuncionario", dados);
+      setFuncionarios((prev) => [...prev, criado]);
+      return criado;
+    }
+    const custoHora = calcularCustoHora(dados.salario_mensal, dados.carga_horaria_semanal);
+    const criado = {
+      id: `func-${Date.now()}`,
+      status: "ativo",
+      quantidade_funcionarios: 1,
+      ...dados,
+      custo_hora: custoHora,
+    };
+    setFuncionarios((prev) => [...prev, criado]);
+    return criado;
+  }, []);
+
+  const atualizarFuncionario = useCallback(async (id, dados) => {
+    const custoHora = calcularCustoHora(dados.salario_mensal, dados.carga_horaria_semanal);
+    setFuncionarios((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, ...dados, custo_hora: custoHora } : f))
+    );
+    if (!isDemoMode) {
+      await postAction("updateFuncionario", { id, ...dados });
+    }
+  }, []);
+
+  const excluirFuncionario = useCallback(async (id) => {
+    setFuncionarios((prev) => prev.filter((f) => f.id !== id));
+    if (!isDemoMode) {
+      await postAction("deleteFuncionario", { id });
+    }
+  }, []);
+
   const value = {
     loading,
     categorias,
     fornecedores,
+    funcionarios,
+    funcionariosById,
     materiasPrimas,
     materiasPrimasById,
     receitas,
@@ -440,6 +551,7 @@ export function StoreProvider({ children }) {
     enviarFichaPdf,
     atualizarRendimentoReceita,
     atualizarDetalhesReceita,
+    atualizarMODReceita,
     adicionarProducao,
     adicionarCoccao,
     adicionarRecheioFrio,
@@ -448,6 +560,9 @@ export function StoreProvider({ children }) {
     excluirProduto,
     salvarInfoNutricional,
     salvarNutricionalMateriaPrima,
+    adicionarFuncionario,
+    atualizarFuncionario,
+    excluirFuncionario,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
