@@ -193,9 +193,7 @@ function ReceitaDetalhe({ receita }) {
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [papel, setPapel] = useState(receita.papel || "");
   const [modoPreparo, setModoPreparo] = useState(receita.modo_preparo || "");
-  const [modFuncaoId, setModFuncaoId] = useState(receita.mod?.funcao_id || "");
-  const [modQuantidadePessoas, setModQuantidadePessoas] = useState(receita.mod?.quantidade_pessoas || 0);
-  const [modTempoMinutos, setModTempoMinutos] = useState(receita.mod?.tempo_minutos || 0);
+  const [modItens, setModItens] = useState(() => backfillLinhaId(receita.mod?.itens || []));
   const [modSalvo, setModSalvo] = useState(false);
   const enviandoRef = useRef(false); // trava síncrona contra duplo clique (o state salvandoPdf é assíncrono e não pega cliques rápidos)
   const adicionandoRef = useRef(new Set()); // trava rápida (400ms) contra clique duplo acidental — não impede adicionar
@@ -227,9 +225,7 @@ function ReceitaDetalhe({ receita }) {
     setErroPdf("");
     setPapel(receita.papel || "");
     setModoPreparo(receita.modo_preparo || "");
-    setModFuncaoId(receita.mod?.funcao_id || "");
-    setModQuantidadePessoas(receita.mod?.quantidade_pessoas || 0);
-    setModTempoMinutos(receita.mod?.tempo_minutos || 0);
+    setModItens(backfillLinhaId(receita.mod?.itens || []));
     setModSalvo(false);
     adicionandoRef.current = new Set();
   }, [receita.id]);
@@ -328,12 +324,33 @@ function ReceitaDetalhe({ receita }) {
   }
 
   function salvarMOD() {
-    atualizarMODReceita(receita.id, {
-      funcao_id: modFuncaoId,
-      quantidade_pessoas: modQuantidadePessoas,
-      tempo_minutos: modTempoMinutos,
-    });
+    atualizarMODReceita(
+      receita.id,
+      modItens.map(({ funcao_id, quantidade_pessoas, tempo_minutos }) => ({
+        funcao_id,
+        quantidade_pessoas,
+        tempo_minutos,
+      }))
+    );
     setModSalvo(true);
+  }
+
+  function adicionarLinhaMOD() {
+    setModItens((prev) => [
+      ...prev,
+      { linha_id: gerarLinhaId(), funcao_id: "", quantidade_pessoas: 1, tempo_minutos: 0 },
+    ]);
+    setModSalvo(false);
+  }
+
+  function alterarLinhaMOD(linhaId, campo, valor) {
+    setModItens((prev) => prev.map((i) => (i.linha_id === linhaId ? { ...i, [campo]: valor } : i)));
+    setModSalvo(false);
+  }
+
+  function removerLinhaMOD(linhaId) {
+    setModItens((prev) => prev.filter((i) => i.linha_id !== linhaId));
+    setModSalvo(false);
   }
 
   function alterarDetalheItemLocal(linhaId, campo, valor) {
@@ -497,10 +514,12 @@ function ReceitaDetalhe({ receita }) {
     receitasById,
   });
 
-  // Custo de MOD calculado ao vivo (mesma conta do backend): custo/hora da
-  // função × quantidade de pessoas × tempo em minutos ÷ 60.
-  const custoHoraModSelecionada = funcionarios.find((f) => f.id === modFuncaoId)?.custo_hora || 0;
-  const custoModEstimado = custoHoraModSelecionada * (modQuantidadePessoas || 0) * ((modTempoMinutos || 0) / 60);
+  // Custo de MOD calculado ao vivo (mesma conta do backend), somando todas as
+  // linhas de função da lista.
+  const custoModEstimado = modItens.reduce((soma, item) => {
+    const custoHora = funcionarios.find((f) => f.id === item.funcao_id)?.custo_hora || 0;
+    return soma + custoHora * (item.quantidade_pessoas || 0) * ((item.tempo_minutos || 0) / 60);
+  }, 0);
 
   return (
     <div className="bg-surface border border-line rounded-lg p-5">
@@ -861,14 +880,13 @@ function ReceitaDetalhe({ receita }) {
 
       <MaoDeObra
         funcionarios={funcionarios}
-        funcaoId={modFuncaoId}
-        setFuncaoId={(v) => { setModFuncaoId(v); setModSalvo(false); }}
-        quantidadePessoas={modQuantidadePessoas}
-        setQuantidadePessoas={(v) => { setModQuantidadePessoas(v); setModSalvo(false); }}
-        tempoMinutos={modTempoMinutos}
-        setTempoMinutos={(v) => { setModTempoMinutos(v); setModSalvo(false); }}
+        itens={modItens}
+        onAdicionarLinha={adicionarLinhaMOD}
+        onAlterarLinha={alterarLinhaMOD}
+        onRemoverLinha={removerLinhaMOD}
         onSalvar={salvarMOD}
         salvo={modSalvo}
+        custoTotal={custoModEstimado}
       />
 
       <div className="mt-5">
@@ -1717,79 +1735,97 @@ function NutricionalProduto({ receitaId, produto, cmvUnitario }) {
 // removida = 1kg a mais de proteína) pra você calibrar com o que sabe na
 // prática (soja hidratada rende mais peso que a seca).
 // ── MÃO DE OBRA (MOD) / HORA HOMEM TRABALHADA (HHT) ─────────────────
-// Custo estimado de mão de obra da receita: escolhe a função responsável
-// (cadastrada em Funcionários), quantas pessoas dessa função trabalham nela
-// e o tempo estimado de preparo — o custo/hora da função é aplicado igual
-// pra todos.
-function MaoDeObra({
-  funcionarios,
-  funcaoId,
-  setFuncaoId,
-  quantidadePessoas,
-  setQuantidadePessoas,
-  tempoMinutos,
-  setTempoMinutos,
-  onSalvar,
-  salvo,
-}) {
+// Custo estimado de mão de obra da receita: uma ou mais linhas, cada uma com
+// sua função (cadastrada em Funcionários), quantidade de pessoas dessa
+// função e tempo estimado — o custo/hora da função é aplicado igual pra
+// todos que exercem ela. Suporta mais de uma função na mesma receita (ex:
+// Auxiliar + Assistente de Produção).
+function MaoDeObra({ funcionarios, itens, onAdicionarLinha, onAlterarLinha, onRemoverLinha, onSalvar, salvo, custoTotal }) {
   const funcionariosAtivos = funcionarios.filter((f) => (f.status || "ativo") === "ativo");
-  const funcaoSelecionada = funcionarios.find((f) => f.id === funcaoId);
-  const custoHora = funcaoSelecionada?.custo_hora || 0;
-  const custoEstimado = custoHora * (quantidadePessoas || 0) * ((tempoMinutos || 0) / 60);
 
   return (
     <div className="mt-5 border border-line rounded-lg p-4">
-      <p className="text-xs uppercase tracking-wide text-muted mb-3">Mão de obra (MOD / HHT estimado)</p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs uppercase tracking-wide text-muted">Mão de obra (MOD / HHT estimado)</p>
+        {funcionariosAtivos.length > 0 && (
+          <button
+            type="button"
+            onClick={onAdicionarLinha}
+            className="text-xs flex items-center gap-1 text-sage hover:underline"
+          >
+            <Plus size={13} /> Adicionar função
+          </button>
+        )}
+      </div>
 
       {funcionariosAtivos.length === 0 ? (
         <p className="text-xs text-muted">
           Nenhuma função cadastrada ainda — cadastre em <span className="font-medium">Funcionários</span> pra poder
           estimar o custo de mão de obra dessa receita.
         </p>
+      ) : itens.length === 0 ? (
+        <p className="text-xs text-muted">Nenhuma função adicionada ainda. Clique em "Adicionar função" acima.</p>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <label className="text-xs text-muted block">
-              Função responsável
-              <select
-                value={funcaoId}
-                onChange={(e) => setFuncaoId(e.target.value)}
-                className="mt-1 w-full px-3 py-2 rounded-md border border-line text-sm"
-              >
-                <option value="">Selecione...</option>
-                {funcionariosAtivos.map((f) => (
-                  <option key={f.id} value={f.id}>{f.funcao}</option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs text-muted block">
-              Quantidade de pessoas
-              <input
-                type="number"
-                min="0"
-                value={quantidadePessoas}
-                onChange={(e) => setQuantidadePessoas(parseFloat(e.target.value) || 0)}
-                className="mt-1 w-full px-3 py-2 rounded-md border border-line text-sm font-mono-num"
-              />
-            </label>
-            <label className="text-xs text-muted block">
-              Tempo de preparo estimado (min)
-              <input
-                type="number"
-                min="0"
-                value={tempoMinutos}
-                onChange={(e) => setTempoMinutos(parseFloat(e.target.value) || 0)}
-                className="mt-1 w-full px-3 py-2 rounded-md border border-line text-sm font-mono-num"
-              />
-            </label>
+          <div className="space-y-2">
+            {itens.map((item) => {
+              const funcaoSelecionada = funcionarios.find((f) => f.id === item.funcao_id);
+              const custoHora = funcaoSelecionada?.custo_hora || 0;
+              const custoLinha = custoHora * (item.quantidade_pessoas || 0) * ((item.tempo_minutos || 0) / 60);
+              return (
+                <div key={item.linha_id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_auto_auto] gap-2 items-end">
+                  <label className="text-xs text-muted block">
+                    Função
+                    <select
+                      value={item.funcao_id}
+                      onChange={(e) => onAlterarLinha(item.linha_id, "funcao_id", e.target.value)}
+                      className="mt-1 w-full px-2 py-1.5 rounded-md border border-line text-sm"
+                    >
+                      <option value="">Selecione...</option>
+                      {funcionariosAtivos.map((f) => (
+                        <option key={f.id} value={f.id}>{f.funcao}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-xs text-muted block">
+                    Pessoas
+                    <input
+                      type="number"
+                      min="0"
+                      value={item.quantidade_pessoas}
+                      onChange={(e) => onAlterarLinha(item.linha_id, "quantidade_pessoas", parseFloat(e.target.value) || 0)}
+                      className="mt-1 w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
+                    />
+                  </label>
+                  <label className="text-xs text-muted block">
+                    Tempo (min)
+                    <input
+                      type="number"
+                      min="0"
+                      value={item.tempo_minutos}
+                      onChange={(e) => onAlterarLinha(item.linha_id, "tempo_minutos", parseFloat(e.target.value) || 0)}
+                      className="mt-1 w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
+                    />
+                  </label>
+                  <div className="text-xs text-muted font-mono-num pb-2 whitespace-nowrap">
+                    {formatBRL(custoLinha)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onRemoverLinha(item.linha_id)}
+                    className="text-muted hover:text-brick pb-2.5"
+                    aria-label="Remover"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
             <span className="text-muted">
-              Custo/hora da função: <span className="font-mono-num text-foreground">{formatBRL(custoHora)}</span>
-            </span>
-            <span className="text-muted">
-              Custo MOD estimado: <span className="font-mono-num font-semibold text-gold">{formatBRL(custoEstimado)}</span>
+              Custo MOD estimado total: <span className="font-mono-num font-semibold text-gold">{formatBRL(custoTotal)}</span>
             </span>
           </div>
 
