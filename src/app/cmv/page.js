@@ -20,7 +20,10 @@ export default function CMVPage() {
           materiasPrimasById,
           receitasById,
         });
-        return { ...r, cmv, quantidadeProducao };
+        const custoMOD = r.mod?.custo_estimado || 0;
+        const custoTotalComMOD = cmv.custoTotal + custoMOD;
+        const cmvUnitarioComMOD = cmv.cmvUnitario + (quantidadeProducao > 0 ? custoMOD / quantidadeProducao : 0);
+        return { ...r, cmv, quantidadeProducao, custoMOD, custoTotalComMOD, cmvUnitarioComMOD };
       }),
     [receitas, materiasPrimasById, receitasById]
   );
@@ -29,7 +32,7 @@ export default function CMVPage() {
     () =>
       linhasTodas
         .filter((r) => !tipoFiltro || r.papel === tipoFiltro)
-        .sort((a, b) => b.cmv.cmvUnitario - a.cmv.cmvUnitario),
+        .sort((a, b) => b.cmvUnitarioComMOD - a.cmvUnitarioComMOD),
     [linhasTodas, tipoFiltro]
   );
 
@@ -42,6 +45,7 @@ export default function CMVPage() {
         <h1 className="font-display text-3xl mt-1">CMV</h1>
         <p className="text-sm text-muted mt-1">
           Toda alteração em uma matéria-prima recalcula automaticamente o CMV de todas as receitas que a utilizam.
+          A coluna MOD usa o custo de mão de obra estimado, cadastrado na própria receita.
         </p>
       </header>
 
@@ -87,15 +91,17 @@ export default function CMVPage() {
               <th className="px-5 py-3 font-medium">Tipo</th>
               <th className="px-5 py-3 font-medium text-right">Ingredientes</th>
               <th className="px-5 py-3 font-medium text-right">Embalagem</th>
-              <th className="px-5 py-3 font-medium text-right">Custo total</th>
+              <th className="px-5 py-3 font-medium text-right">MOD</th>
+              <th className="px-5 py-3 font-medium text-right">Custo total (c/ MOD)</th>
               <th className="px-5 py-3 font-medium text-right">Produção</th>
               <th className="px-5 py-3 font-medium text-right">CMV unitário</th>
+              <th className="px-5 py-3 font-medium text-right">CMV unitário (c/ MOD)</th>
               <th className="px-5 py-3 font-medium text-right">% do maior custo</th>
             </tr>
           </thead>
           <tbody>
             {linhas.map((r) => {
-              const percentual = maiorCusto ? (r.cmv.cmvUnitario / maiorCusto.cmv.cmvUnitario) * 100 : 0;
+              const percentual = maiorCusto ? (r.cmvUnitarioComMOD / maiorCusto.cmvUnitarioComMOD) * 100 : 0;
               return (
                 <tr key={r.id} className="border-b border-line last:border-0">
                   <td className="px-5 py-3">{r.nome}</td>
@@ -110,10 +116,16 @@ export default function CMVPage() {
                   </td>
                   <td className="px-5 py-3 text-right font-mono-num">{formatBRL(r.cmv.custoIngredientes)}</td>
                   <td className="px-5 py-3 text-right font-mono-num">{formatBRL(r.cmv.custoEmbalagem)}</td>
-                  <td className="px-5 py-3 text-right font-mono-num font-medium">{formatBRL(r.cmv.custoTotal)}</td>
+                  <td className="px-5 py-3 text-right font-mono-num">
+                    {r.custoMOD > 0 ? formatBRL(r.custoMOD) : <span className="text-muted">—</span>}
+                  </td>
+                  <td className="px-5 py-3 text-right font-mono-num font-medium">{formatBRL(r.custoTotalComMOD)}</td>
                   <td className="px-5 py-3 text-right font-mono-num text-muted">{r.quantidadeProducao} un</td>
-                  <td className="px-5 py-3 text-right font-mono-num text-gold font-semibold">
+                  <td className="px-5 py-3 text-right font-mono-num text-muted">
                     {formatBRL(r.cmv.cmvUnitario)}
+                  </td>
+                  <td className="px-5 py-3 text-right font-mono-num text-gold font-semibold">
+                    {formatBRL(r.cmvUnitarioComMOD)}
                   </td>
                   <td className="px-5 py-3">
                     <div className="w-full h-1.5 bg-gold-soft rounded-full overflow-hidden">
@@ -125,7 +137,7 @@ export default function CMVPage() {
             })}
             {linhas.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-5 py-8 text-center text-muted text-sm">
+                <td colSpan={10} className="px-5 py-8 text-center text-muted text-sm">
                   {tipoFiltro
                     ? "Nenhuma receita desse tipo ainda."
                     : "Cadastre receitas e ingredientes para ver o CMV."}
