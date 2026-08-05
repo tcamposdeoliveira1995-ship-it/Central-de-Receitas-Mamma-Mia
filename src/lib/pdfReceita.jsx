@@ -238,9 +238,10 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
   const celQtde = mostrarCustos ? styles.celQtde : styles.celQtdeSemCusto;
   const celUnid = mostrarCustos ? styles.celUnid : styles.celUnidSemCusto;
 
-  // Custo de mão de obra (MOD) estimado, cadastrado na receita — soma ao CMV
-  // de ingredientes/embalagem só na versão do PDF que mostra custos.
-  const custoMOD = receita.mod?.custo_estimado || 0;
+  // Custo de mão de obra (MOD) estimado, cadastrado na receita (soma de todas
+  // as funções da lista) — soma ao CMV de ingredientes/embalagem só na
+  // versão do PDF que mostra custos.
+  const custoMOD = receita.mod?.custo_total || 0;
   const custoTotalComMOD = cmv.custoTotal + custoMOD;
   const cmvUnitarioComMOD = cmv.cmvUnitario + (quantidadeProducao > 0 ? custoMOD / quantidadeProducao : 0);
 
@@ -308,6 +309,14 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
               <Text style={styles.cmvLabel}>CMV unitário c/ MOD (produção prevista: {formatNumber(quantidadeProducao, 0)} un)</Text>
               <Text style={styles.cmvValor}>{formatBRL(cmvUnitarioComMOD)}</Text>
             </View>
+
+            {receita.mod?.itens?.length > 0 && (
+              <Text style={{ fontSize: 8.5, color: CORES.muted, marginTop: 6 }}>
+                Mão de obra: {receita.mod.itens
+                  .map((i) => `${i.funcao_nome || "—"} (${formatNumber(i.tempo_minutos, 0)} min · ${i.quantidade_pessoas}p)`)
+                  .join(" + ")}
+              </Text>
+            )}
           </>
         )}
 
