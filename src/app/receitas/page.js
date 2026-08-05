@@ -177,10 +177,12 @@ function ReceitaDetalhe({ receita }) {
     materiasPrimasById,
     receitas,
     receitasById,
+    funcionarios,
     atualizarItensReceita,
     adicionarMateriaPrima,
     enviarFichaPdf,
     atualizarDetalhesReceita,
+    atualizarMODReceita,
   } = useStore();
   const [itens, setItens] = useState(() => backfillLinhaId(receita.itens || []));
   const [busca, setBusca] = useState("");
@@ -191,6 +193,10 @@ function ReceitaDetalhe({ receita }) {
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [papel, setPapel] = useState(receita.papel || "");
   const [modoPreparo, setModoPreparo] = useState(receita.modo_preparo || "");
+  const [modFuncaoId, setModFuncaoId] = useState(receita.mod?.funcao_id || "");
+  const [modQuantidadePessoas, setModQuantidadePessoas] = useState(receita.mod?.quantidade_pessoas || 0);
+  const [modTempoMinutos, setModTempoMinutos] = useState(receita.mod?.tempo_minutos || 0);
+  const [modSalvo, setModSalvo] = useState(false);
   const enviandoRef = useRef(false); // trava síncrona contra duplo clique (o state salvandoPdf é assíncrono e não pega cliques rápidos)
   const adicionandoRef = useRef(new Set()); // trava rápida (400ms) contra clique duplo acidental — não impede adicionar
   // o mesmo ingrediente de novo depois disso, já que agora é permitido (ex: farinha no preparo + farinha pra polvilhar).
@@ -221,6 +227,10 @@ function ReceitaDetalhe({ receita }) {
     setErroPdf("");
     setPapel(receita.papel || "");
     setModoPreparo(receita.modo_preparo || "");
+    setModFuncaoId(receita.mod?.funcao_id || "");
+    setModQuantidadePessoas(receita.mod?.quantidade_pessoas || 0);
+    setModTempoMinutos(receita.mod?.tempo_minutos || 0);
+    setModSalvo(false);
     adicionandoRef.current = new Set();
   }, [receita.id]);
 
@@ -315,6 +325,15 @@ function ReceitaDetalhe({ receita }) {
   function salvarModoPreparo() {
     if (modoPreparo === (receita.modo_preparo || "")) return; // nada mudou, não salva à toa
     atualizarDetalhesReceita(receita.id, { papel, modo_preparo: modoPreparo });
+  }
+
+  function salvarMOD() {
+    atualizarMODReceita(receita.id, {
+      funcao_id: modFuncaoId,
+      quantidade_pessoas: modQuantidadePessoas,
+      tempo_minutos: modTempoMinutos,
+    });
+    setModSalvo(true);
   }
 
   function alterarDetalheItemLocal(linhaId, campo, valor) {
@@ -477,6 +496,11 @@ function ReceitaDetalhe({ receita }) {
     materiasPrimasById,
     receitasById,
   });
+
+  // Custo de MOD calculado ao vivo (mesma conta do backend): custo/hora da
+  // função × quantidade de pessoas × tempo em minutos ÷ 60.
+  const custoHoraModSelecionada = funcionarios.find((f) => f.id === modFuncaoId)?.custo_hora || 0;
+  const custoModEstimado = custoHoraModSelecionada * (modQuantidadePessoas || 0) * ((modTempoMinutos || 0) / 60);
 
   return (
     <div className="bg-surface border border-line rounded-lg p-5">
@@ -835,6 +859,18 @@ function ReceitaDetalhe({ receita }) {
 
       <EconomiaSoja itens={itens} materiasPrimasById={materiasPrimasById} receitasById={receitasById} embalagemCusto={receita.embalagem_custo || 0} />
 
+      <MaoDeObra
+        funcionarios={funcionarios}
+        funcaoId={modFuncaoId}
+        setFuncaoId={(v) => { setModFuncaoId(v); setModSalvo(false); }}
+        quantidadePessoas={modQuantidadePessoas}
+        setQuantidadePessoas={(v) => { setModQuantidadePessoas(v); setModSalvo(false); }}
+        tempoMinutos={modTempoMinutos}
+        setTempoMinutos={(v) => { setModTempoMinutos(v); setModSalvo(false); }}
+        onSalvar={salvarMOD}
+        salvo={modSalvo}
+      />
+
       <div className="mt-5">
         <label className="text-xs uppercase tracking-wide text-muted block mb-1.5">Modo de preparo</label>
         <textarea
@@ -847,7 +883,7 @@ function ReceitaDetalhe({ receita }) {
         />
       </div>
 
-      <div className="mt-5 pt-4 border-t border-line grid grid-cols-3 gap-4 text-sm">
+      <div className="mt-5 pt-4 border-t border-line grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
         <div>
           <p className="text-xs uppercase tracking-wide text-muted">Ingredientes</p>
           <p className="font-mono-num font-medium mt-0.5">{formatBRL(cmv.custoIngredientes)}</p>
@@ -857,13 +893,25 @@ function ReceitaDetalhe({ receita }) {
           <p className="font-mono-num font-medium mt-0.5">{formatBRL(cmv.custoEmbalagem)}</p>
         </div>
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted">Total</p>
-          <p className="font-mono-num font-semibold mt-0.5 text-gold">{formatBRL(cmv.custoTotal)}</p>
+          <p className="text-xs uppercase tracking-wide text-muted">Mão de obra (MOD)</p>
+          <p className="font-mono-num font-medium mt-0.5">{formatBRL(custoModEstimado)}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted">Total (c/ MOD)</p>
+          <p className="font-mono-num font-semibold mt-0.5 text-gold">{formatBRL(cmv.custoTotal + custoModEstimado)}</p>
         </div>
       </div>
-      <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-xs uppercase tracking-wide text-muted">CMV unitário</span>
-        <span className="font-display text-xl font-mono-num text-sage">{formatBRL(cmv.cmvUnitario)}</span>
+      <div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1">
+        <span className="flex items-baseline gap-2">
+          <span className="text-xs uppercase tracking-wide text-muted">CMV unitário</span>
+          <span className="font-display text-xl font-mono-num text-sage">{formatBRL(cmv.cmvUnitario)}</span>
+        </span>
+        <span className="flex items-baseline gap-2">
+          <span className="text-xs uppercase tracking-wide text-muted">CMV unitário (c/ MOD)</span>
+          <span className="font-display text-xl font-mono-num text-gold">
+            {formatBRL(cmv.cmvUnitario + (quantidadeProducao > 0 ? custoModEstimado / quantidadeProducao : 0))}
+          </span>
+        </span>
         <span className="text-xs text-muted">(produção prevista: {formatNumber(quantidadeProducao, 0)} un)</span>
       </div>
     </div>
@@ -1668,6 +1716,102 @@ function NutricionalProduto({ receitaId, produto, cmvUnitario }) {
 // o fator de substituição fica editável (começa em 1:1 — 1kg de soja
 // removida = 1kg a mais de proteína) pra você calibrar com o que sabe na
 // prática (soja hidratada rende mais peso que a seca).
+// ── MÃO DE OBRA (MOD) / HORA HOMEM TRABALHADA (HHT) ─────────────────
+// Custo estimado de mão de obra da receita: escolhe a função responsável
+// (cadastrada em Funcionários), quantas pessoas dessa função trabalham nela
+// e o tempo estimado de preparo — o custo/hora da função é aplicado igual
+// pra todos.
+function MaoDeObra({
+  funcionarios,
+  funcaoId,
+  setFuncaoId,
+  quantidadePessoas,
+  setQuantidadePessoas,
+  tempoMinutos,
+  setTempoMinutos,
+  onSalvar,
+  salvo,
+}) {
+  const funcionariosAtivos = funcionarios.filter((f) => (f.status || "ativo") === "ativo");
+  const funcaoSelecionada = funcionarios.find((f) => f.id === funcaoId);
+  const custoHora = funcaoSelecionada?.custo_hora || 0;
+  const custoEstimado = custoHora * (quantidadePessoas || 0) * ((tempoMinutos || 0) / 60);
+
+  return (
+    <div className="mt-5 border border-line rounded-lg p-4">
+      <p className="text-xs uppercase tracking-wide text-muted mb-3">Mão de obra (MOD / HHT estimado)</p>
+
+      {funcionariosAtivos.length === 0 ? (
+        <p className="text-xs text-muted">
+          Nenhuma função cadastrada ainda — cadastre em <span className="font-medium">Funcionários</span> pra poder
+          estimar o custo de mão de obra dessa receita.
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <label className="text-xs text-muted block">
+              Função responsável
+              <select
+                value={funcaoId}
+                onChange={(e) => setFuncaoId(e.target.value)}
+                className="mt-1 w-full px-3 py-2 rounded-md border border-line text-sm"
+              >
+                <option value="">Selecione...</option>
+                {funcionariosAtivos.map((f) => (
+                  <option key={f.id} value={f.id}>{f.funcao}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-muted block">
+              Quantidade de pessoas
+              <input
+                type="number"
+                min="0"
+                value={quantidadePessoas}
+                onChange={(e) => setQuantidadePessoas(parseFloat(e.target.value) || 0)}
+                className="mt-1 w-full px-3 py-2 rounded-md border border-line text-sm font-mono-num"
+              />
+            </label>
+            <label className="text-xs text-muted block">
+              Tempo de preparo estimado (min)
+              <input
+                type="number"
+                min="0"
+                value={tempoMinutos}
+                onChange={(e) => setTempoMinutos(parseFloat(e.target.value) || 0)}
+                className="mt-1 w-full px-3 py-2 rounded-md border border-line text-sm font-mono-num"
+              />
+            </label>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+            <span className="text-muted">
+              Custo/hora da função: <span className="font-mono-num text-foreground">{formatBRL(custoHora)}</span>
+            </span>
+            <span className="text-muted">
+              Custo MOD estimado: <span className="font-mono-num font-semibold text-gold">{formatBRL(custoEstimado)}</span>
+            </span>
+          </div>
+
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              onClick={onSalvar}
+              className="text-xs bg-sage text-white px-3 py-1.5 rounded-md hover:opacity-90"
+            >
+              Salvar MOD
+            </button>
+            {salvo && (
+              <span className="text-xs text-sage flex items-center gap-1">
+                <Check size={12} /> Salvo
+              </span>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function EconomiaSoja({ itens, materiasPrimasById, receitasById, embalagemCusto }) {
   const [fator, setFator] = useState("1");
   const [proteinaEscolhidaId, setProteinaEscolhidaId] = useState(null);
