@@ -178,11 +178,11 @@ function ReceitaDetalhe({ receita }) {
     receitas,
     receitasById,
     funcionarios,
+    setores,
     atualizarItensReceita,
     adicionarMateriaPrima,
     enviarFichaPdf,
     atualizarDetalhesReceita,
-    atualizarMODReceita,
   } = useStore();
   const [itens, setItens] = useState(() => backfillLinhaId(receita.itens || []));
   const [busca, setBusca] = useState("");
@@ -193,8 +193,6 @@ function ReceitaDetalhe({ receita }) {
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [papel, setPapel] = useState(receita.papel || "");
   const [modoPreparo, setModoPreparo] = useState(receita.modo_preparo || "");
-  const [modItens, setModItens] = useState(() => backfillLinhaId(receita.mod?.itens || []));
-  const [modSalvo, setModSalvo] = useState(false);
   const enviandoRef = useRef(false); // trava síncrona contra duplo clique (o state salvandoPdf é assíncrono e não pega cliques rápidos)
   const adicionandoRef = useRef(new Set()); // trava rápida (400ms) contra clique duplo acidental — não impede adicionar
   // o mesmo ingrediente de novo depois disso, já que agora é permitido (ex: farinha no preparo + farinha pra polvilhar).
@@ -225,8 +223,6 @@ function ReceitaDetalhe({ receita }) {
     setErroPdf("");
     setPapel(receita.papel || "");
     setModoPreparo(receita.modo_preparo || "");
-    setModItens(backfillLinhaId(receita.mod?.itens || []));
-    setModSalvo(false);
     adicionandoRef.current = new Set();
   }, [receita.id]);
 
@@ -321,36 +317,6 @@ function ReceitaDetalhe({ receita }) {
   function salvarModoPreparo() {
     if (modoPreparo === (receita.modo_preparo || "")) return; // nada mudou, não salva à toa
     atualizarDetalhesReceita(receita.id, { papel, modo_preparo: modoPreparo });
-  }
-
-  function salvarMOD() {
-    atualizarMODReceita(
-      receita.id,
-      modItens.map(({ funcao_id, quantidade_pessoas, tempo_minutos }) => ({
-        funcao_id,
-        quantidade_pessoas,
-        tempo_minutos,
-      }))
-    );
-    setModSalvo(true);
-  }
-
-  function adicionarLinhaMOD() {
-    setModItens((prev) => [
-      ...prev,
-      { linha_id: gerarLinhaId(), funcao_id: "", quantidade_pessoas: 1, tempo_minutos: 0 },
-    ]);
-    setModSalvo(false);
-  }
-
-  function alterarLinhaMOD(linhaId, campo, valor) {
-    setModItens((prev) => prev.map((i) => (i.linha_id === linhaId ? { ...i, [campo]: valor } : i)));
-    setModSalvo(false);
-  }
-
-  function removerLinhaMOD(linhaId) {
-    setModItens((prev) => prev.filter((i) => i.linha_id !== linhaId));
-    setModSalvo(false);
   }
 
   function alterarDetalheItemLocal(linhaId, campo, valor) {
@@ -514,13 +480,6 @@ function ReceitaDetalhe({ receita }) {
     receitasById,
   });
 
-  // Custo de MOD calculado ao vivo (mesma conta do backend), somando todas as
-  // linhas de função da lista.
-  const custoModEstimado = modItens.reduce((soma, item) => {
-    const custoHora = funcionarios.find((f) => f.id === item.funcao_id)?.custo_hora || 0;
-    return soma + custoHora * (item.quantidade_pessoas || 0) * ((item.tempo_minutos || 0) / 60);
-  }, 0);
-
   return (
     <div className="bg-surface border border-line rounded-lg p-5">
       <div className="flex items-baseline justify-between flex-wrap gap-3">
@@ -579,7 +538,14 @@ function ReceitaDetalhe({ receita }) {
         </div>
       </div>
 
-      <ProdutosSKU receitaId={receita.id} produtos={receita.produtos} cmvUnitario={cmv.cmvUnitario} />
+      <ProdutosSKU
+        receitaId={receita.id}
+        produtos={receita.produtos}
+        cmvUnitario={cmv.cmvUnitario}
+        quantidadeProducao={quantidadeProducao}
+        funcionarios={funcionarios}
+        setores={setores}
+      />
 
       {/* Upload de ficha técnica em PDF */}
       <div className="mt-5 border border-dashed border-line rounded-lg p-4">
@@ -878,17 +844,6 @@ function ReceitaDetalhe({ receita }) {
 
       <EconomiaSoja itens={itens} materiasPrimasById={materiasPrimasById} receitasById={receitasById} embalagemCusto={receita.embalagem_custo || 0} />
 
-      <MaoDeObra
-        funcionarios={funcionarios}
-        itens={modItens}
-        onAdicionarLinha={adicionarLinhaMOD}
-        onAlterarLinha={alterarLinhaMOD}
-        onRemoverLinha={removerLinhaMOD}
-        onSalvar={salvarMOD}
-        salvo={modSalvo}
-        custoTotal={custoModEstimado}
-      />
-
       <div className="mt-5">
         <label className="text-xs uppercase tracking-wide text-muted block mb-1.5">Modo de preparo</label>
         <textarea
@@ -901,7 +856,7 @@ function ReceitaDetalhe({ receita }) {
         />
       </div>
 
-      <div className="mt-5 pt-4 border-t border-line grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+      <div className="mt-5 pt-4 border-t border-line grid grid-cols-3 gap-4 text-sm">
         <div>
           <p className="text-xs uppercase tracking-wide text-muted">Ingredientes</p>
           <p className="font-mono-num font-medium mt-0.5">{formatBRL(cmv.custoIngredientes)}</p>
@@ -911,26 +866,17 @@ function ReceitaDetalhe({ receita }) {
           <p className="font-mono-num font-medium mt-0.5">{formatBRL(cmv.custoEmbalagem)}</p>
         </div>
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted">Mão de obra (MOD)</p>
-          <p className="font-mono-num font-medium mt-0.5">{formatBRL(custoModEstimado)}</p>
-        </div>
-        <div>
-          <p className="text-xs uppercase tracking-wide text-muted">Total (c/ MOD)</p>
-          <p className="font-mono-num font-semibold mt-0.5 text-gold">{formatBRL(cmv.custoTotal + custoModEstimado)}</p>
+          <p className="text-xs uppercase tracking-wide text-muted">Total</p>
+          <p className="font-mono-num font-semibold mt-0.5 text-gold">{formatBRL(cmv.custoTotal)}</p>
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1">
-        <span className="flex items-baseline gap-2">
-          <span className="text-xs uppercase tracking-wide text-muted">CMV unitário</span>
-          <span className="font-display text-xl font-mono-num text-sage">{formatBRL(cmv.cmvUnitario)}</span>
-        </span>
-        <span className="flex items-baseline gap-2">
-          <span className="text-xs uppercase tracking-wide text-muted">CMV unitário (c/ MOD)</span>
-          <span className="font-display text-xl font-mono-num text-gold">
-            {formatBRL(cmv.cmvUnitario + (quantidadeProducao > 0 ? custoModEstimado / quantidadeProducao : 0))}
-          </span>
-        </span>
+      <div className="mt-3 flex items-baseline gap-2">
+        <span className="text-xs uppercase tracking-wide text-muted">CMV unitário</span>
+        <span className="font-display text-xl font-mono-num text-sage">{formatBRL(cmv.cmvUnitario)}</span>
         <span className="text-xs text-muted">(produção prevista: {formatNumber(quantidadeProducao, 0)} un)</span>
+        <span className="text-xs text-muted ml-2">
+          A mão de obra (MOD) agora é definida por Produto/SKU, logo abaixo em "Produtos / Códigos (SKUs)".
+        </span>
       </div>
     </div>
   );
@@ -1197,7 +1143,7 @@ function ImportarProdutosLote({ receitaId, onFechar }) {
   );
 }
 
-function ProdutosSKU({ receitaId, produtos, cmvUnitario }) {
+function ProdutosSKU({ receitaId, produtos, cmvUnitario, quantidadeProducao, funcionarios, setores }) {
   const { adicionarProduto } = useStore();
   const [adicionando, setAdicionando] = useState(false);
   const [novo, setNovo] = useState(produtoVazio());
@@ -1270,6 +1216,9 @@ function ProdutosSKU({ receitaId, produtos, cmvUnitario }) {
             receitaId={receitaId}
             produto={p}
             cmvUnitario={cmvUnitario}
+            quantidadeProducao={quantidadeProducao}
+            funcionarios={funcionarios}
+            setores={setores}
             iniciarAberto={p.id === duplicadoId}
             onDuplicado={setDuplicadoId}
           />
@@ -1282,12 +1231,55 @@ function ProdutosSKU({ receitaId, produtos, cmvUnitario }) {
   );
 }
 
-function ProdutoItem({ receitaId, produto, cmvUnitario, iniciarAberto, onDuplicado }) {
-  const { atualizarProduto, excluirProduto, adicionarProduto, salvarInfoNutricional } = useStore();
+function ProdutoItem({ receitaId, produto, cmvUnitario, quantidadeProducao, funcionarios, setores, iniciarAberto, onDuplicado }) {
+  const { atualizarProduto, excluirProduto, adicionarProduto, salvarInfoNutricional, atualizarMODProduto } = useStore();
   const [expandido, setExpandido] = useState(!!iniciarAberto);
   const [editando, setEditando] = useState(!!iniciarAberto);
   const [campos, setCampos] = useState(() => camposDeProduto(produto));
+  const [modItens, setModItens] = useState(() => backfillLinhaId(produto.mod?.itens || []));
+  const [modSalvo, setModSalvo] = useState(false);
   const qtdAlertasRotulagem = calcularAlertasRotulagem(produto.tabela_nutricional).length;
+
+  // Custo de MOD desse produto calculado ao vivo, dividido pela quantidade
+  // produzida da receita (rendimento) — mesma lógica de antes, só que agora
+  // por Produto/SKU em vez de por Receita.
+  const custoModTotal = modItens.reduce((soma, item) => {
+    const custoHora = funcionarios.find((f) => f.id === item.funcao_id)?.custo_hora || 0;
+    return soma + custoHora * (item.quantidade_pessoas || 0) * ((item.tempo_minutos || 0) / 60);
+  }, 0);
+  const custoModPorUnidade = quantidadeProducao > 0 ? custoModTotal / quantidadeProducao : 0;
+
+  function salvarMOD() {
+    atualizarMODProduto(
+      receitaId,
+      produto.id,
+      modItens.map(({ setor_id, funcao_id, quantidade_pessoas, tempo_minutos }) => ({
+        setor_id,
+        funcao_id,
+        quantidade_pessoas,
+        tempo_minutos,
+      }))
+    );
+    setModSalvo(true);
+  }
+
+  function adicionarLinhaMOD() {
+    setModItens((prev) => [
+      ...prev,
+      { linha_id: gerarLinhaId(), setor_id: "", funcao_id: "", quantidade_pessoas: 1, tempo_minutos: 0 },
+    ]);
+    setModSalvo(false);
+  }
+
+  function alterarLinhaMOD(linhaId, campo, valor) {
+    setModItens((prev) => prev.map((i) => (i.linha_id === linhaId ? { ...i, [campo]: valor } : i)));
+    setModSalvo(false);
+  }
+
+  function removerLinhaMOD(linhaId) {
+    setModItens((prev) => prev.filter((i) => i.linha_id !== linhaId));
+    setModSalvo(false);
+  }
 
   async function salvarEdicao() {
     if (campos.status === "ativo") {
@@ -1441,7 +1433,27 @@ function ProdutoItem({ receitaId, produto, cmvUnitario, iniciarAberto, onDuplica
             </div>
           )}
 
-          <NutricionalProduto receitaId={receitaId} produto={produto} cmvUnitario={cmvUnitario} />
+          <NutricionalProduto
+            receitaId={receitaId}
+            produto={produto}
+            cmvUnitario={cmvUnitario}
+            custoModPorUnidade={custoModPorUnidade}
+          />
+
+          <div className="border-t border-line pt-3">
+            <MaoDeObra
+              funcionarios={funcionarios}
+              setores={setores}
+              itens={modItens}
+              onAdicionarLinha={adicionarLinhaMOD}
+              onAlterarLinha={alterarLinhaMOD}
+              onRemoverLinha={removerLinhaMOD}
+              onSalvar={salvarMOD}
+              salvo={modSalvo}
+              custoTotal={custoModTotal}
+              custoPorUnidade={custoModPorUnidade}
+            />
+          </div>
         </div>
       )}
     </div>
@@ -1493,7 +1505,7 @@ function LupaRotulagem({ alertas }) {
   );
 }
 
-function NutricionalProduto({ receitaId, produto, cmvUnitario }) {
+function NutricionalProduto({ receitaId, produto, cmvUnitario, custoModPorUnidade = 0 }) {
   const { salvarInfoNutricional } = useStore();
   const info = produto.info_nutricional;
   const [editando, setEditando] = useState(false);
@@ -1507,13 +1519,15 @@ function NutricionalProduto({ receitaId, produto, cmvUnitario }) {
   );
   const alertasRotulagem = calcularAlertasRotulagem(produto.tabela_nutricional);
 
-  // Custo do pacote = CMV unitário da receita × Qtde. PCT (quantas unidades
-  // de produção entram nesse pacote). Não é salvo — recalcula toda vez que
-  // abre, porque o CMV pode mudar conforme o preço dos ingredientes muda.
+  // Custo do pacote = (CMV unitário da receita + MOD por unidade desse
+  // produto) × Qtde. PCT (quantas unidades de produção entram nesse pacote).
+  // Não é salvo — recalcula toda vez que abre, porque o CMV e a MOD podem
+  // mudar conforme o preço dos ingredientes ou o tempo de mão de obra mudam.
+  const cmvUnitarioComMOD = (cmvUnitario || 0) + (custoModPorUnidade || 0);
   const qtdePctSalva = parseFloat(info?.medida_caseira) || 0;
-  const custoPacote = cmvUnitario && qtdePctSalva ? cmvUnitario * qtdePctSalva : null;
+  const custoPacote = cmvUnitarioComMOD && qtdePctSalva ? cmvUnitarioComMOD * qtdePctSalva : null;
   const qtdePctEditando = parseFloat(medidaCaseira) || 0;
-  const custoPacoteEditando = cmvUnitario && qtdePctEditando ? cmvUnitario * qtdePctEditando : null;
+  const custoPacoteEditando = cmvUnitarioComMOD && qtdePctEditando ? cmvUnitarioComMOD * qtdePctEditando : null;
 
   function alterarLinha(idx, campo, valor) {
     setTabela((prev) => prev.map((l, i) => (i === idx ? { ...l, [campo]: valor } : l)));
@@ -1579,7 +1593,7 @@ function NutricionalProduto({ receitaId, produto, cmvUnitario }) {
                 <span className="font-mono-num font-medium">{formatNumber(qtdePctSalva, 0)}</span>
                 {custoPacote !== null && (
                   <>
-                    <span className="text-muted">· Custo do pacote (CMV unit. × Qtde. PCT):</span>
+                    <span className="text-muted">· Custo do pacote (CMV unit. c/ MOD × Qtde. PCT):</span>
                     <span className="font-mono-num font-semibold text-sage">{formatBRL(custoPacote)}</span>
                   </>
                 )}
@@ -1740,11 +1754,12 @@ function NutricionalProduto({ receitaId, produto, cmvUnitario }) {
 // função e tempo estimado — o custo/hora da função é aplicado igual pra
 // todos que exercem ela. Suporta mais de uma função na mesma receita (ex:
 // Auxiliar + Assistente de Produção).
-function MaoDeObra({ funcionarios, itens, onAdicionarLinha, onAlterarLinha, onRemoverLinha, onSalvar, salvo, custoTotal }) {
+function MaoDeObra({ funcionarios, setores, itens, onAdicionarLinha, onAlterarLinha, onRemoverLinha, onSalvar, salvo, custoTotal, custoPorUnidade }) {
   const funcionariosAtivos = funcionarios.filter((f) => (f.status || "ativo") === "ativo");
+  const setoresAtivos = (setores || []).filter((s) => (s.status || "ativo") === "ativo");
 
   return (
-    <div className="mt-5 border border-line rounded-lg p-4">
+    <div className="mt-3 border border-line rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs uppercase tracking-wide text-muted">Mão de obra (MOD / HHT estimado)</p>
         {funcionariosAtivos.length > 0 && (
@@ -1753,7 +1768,7 @@ function MaoDeObra({ funcionarios, itens, onAdicionarLinha, onAlterarLinha, onRe
             onClick={onAdicionarLinha}
             className="text-xs flex items-center gap-1 text-sage hover:underline"
           >
-            <Plus size={13} /> Adicionar função
+            <Plus size={13} /> Adicionar linha
           </button>
         )}
       </div>
@@ -1761,10 +1776,10 @@ function MaoDeObra({ funcionarios, itens, onAdicionarLinha, onAlterarLinha, onRe
       {funcionariosAtivos.length === 0 ? (
         <p className="text-xs text-muted">
           Nenhuma função cadastrada ainda — cadastre em <span className="font-medium">Funcionários</span> pra poder
-          estimar o custo de mão de obra dessa receita.
+          estimar o custo de mão de obra desse produto.
         </p>
       ) : itens.length === 0 ? (
-        <p className="text-xs text-muted">Nenhuma função adicionada ainda. Clique em "Adicionar função" acima.</p>
+        <p className="text-xs text-muted">Nenhuma linha adicionada ainda. Clique em "Adicionar linha" acima.</p>
       ) : (
         <>
           <div className="space-y-2">
@@ -1773,7 +1788,20 @@ function MaoDeObra({ funcionarios, itens, onAdicionarLinha, onAlterarLinha, onRe
               const custoHora = funcaoSelecionada?.custo_hora || 0;
               const custoLinha = custoHora * (item.quantidade_pessoas || 0) * ((item.tempo_minutos || 0) / 60);
               return (
-                <div key={item.linha_id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_auto_auto] gap-2 items-end">
+                <div key={item.linha_id} className="grid grid-cols-1 sm:grid-cols-[1.3fr_1.3fr_0.8fr_0.8fr_auto_auto] gap-2 items-end">
+                  <label className="text-xs text-muted block">
+                    Setor
+                    <select
+                      value={item.setor_id || ""}
+                      onChange={(e) => onAlterarLinha(item.linha_id, "setor_id", e.target.value)}
+                      className="mt-1 w-full px-2 py-1.5 rounded-md border border-line text-sm"
+                    >
+                      <option value="">Selecione...</option>
+                      {setoresAtivos.map((s) => (
+                        <option key={s.id} value={s.id}>{s.nome}</option>
+                      ))}
+                    </select>
+                  </label>
                   <label className="text-xs text-muted block">
                     Função
                     <select
@@ -1825,7 +1853,10 @@ function MaoDeObra({ funcionarios, itens, onAdicionarLinha, onAlterarLinha, onRe
 
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
             <span className="text-muted">
-              Custo MOD estimado total: <span className="font-mono-num font-semibold text-gold">{formatBRL(custoTotal)}</span>
+              Custo MOD total (rendimento da receita): <span className="font-mono-num font-semibold text-gold">{formatBRL(custoTotal)}</span>
+            </span>
+            <span className="text-muted">
+              Custo MOD por unidade: <span className="font-mono-num font-semibold text-gold">{formatBRL(custoPorUnidade)}</span>
             </span>
           </div>
 
