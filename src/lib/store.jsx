@@ -579,6 +579,38 @@ export function StoreProvider({ children }) {
     [enfileirar]
   );
 
+  // ── NUTRICIONAL CALCULADA DA RECEITA (recheio / receita interna) ──
+  // Diferente das outras funções daqui: NÃO atualiza o estado local antes de
+  // chamar o backend, porque o cálculo pode ser bloqueado (faltar nutricional
+  // de algum ingrediente) — só aplica na tela quando o backend confirma "ok".
+  const calcularNutricionalReceita = useCallback(async (receitaId) => {
+    if (!isDemoMode) {
+      const resultado = await postAction("calcularNutricionalReceita", { receita_id: receitaId });
+      if (resultado && resultado.ok) {
+        setReceitas((prev) =>
+          prev.map((r) =>
+            r.id === receitaId
+              ? {
+                  ...r,
+                  nutricional: {
+                    data_calculo: resultado.data_calculo,
+                    peso_base_gramas: resultado.peso_base_gramas,
+                    status: "ok",
+                  },
+                  tabela_nutricional: resultado.tabela || [],
+                }
+              : r
+          )
+        );
+      }
+      return resultado;
+    }
+
+    // Modo demonstração: as matérias-primas de exemplo não têm nutricional
+    // cadastrada, então não dá pra calcular de verdade — avisa igual o backend faria.
+    return { ok: false, erro: "Cálculo nutricional não disponível no modo demonstração." };
+  }, []);
+
   // ── SETORES (etapa do processo: Produção, Forno/Congelamento, Expedição etc.) ──
   // Cadastro livre — usado pra classificar cada linha de MOD por onde no
   // processo aquele trabalho acontece.
@@ -683,6 +715,7 @@ export function StoreProvider({ children }) {
     atualizarMODProduto,
     salvarInfoNutricional,
     salvarNutricionalMateriaPrima,
+    calcularNutricionalReceita,
     adicionarSetor,
     atualizarSetor,
     excluirSetor,
