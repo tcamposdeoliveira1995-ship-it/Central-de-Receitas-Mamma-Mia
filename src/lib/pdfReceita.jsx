@@ -312,7 +312,7 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
         ) : null}
 
         {(receita.tabela_nutricional || []).length > 0 ? (
-          <>
+          <View wrap={false}>
             <Text style={styles.secaoTitulo}>Nutricional da receita (recheio/massa)</Text>
             {receita.nutricional ? (
               <Text style={{ fontSize: 8.5, color: CORES.muted, marginBottom: 6 }}>
@@ -334,7 +334,7 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
                 <Text style={styles.nutriVd}>{n.vd_percentual || "-"}</Text>
               </View>
             ))}
-          </>
+          </View>
         ) : null}
 
         {(receita.produtos || []).length > 0 ? (
