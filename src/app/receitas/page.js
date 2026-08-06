@@ -1514,26 +1514,35 @@ function LupaRotulagem({ alertas }) {
 // usada e normalizada pelo peso final do rendimento. É uma "foto": só
 // recalcula quando o botão é clicado.
 function NutricionalReceita({ receita }) {
-  const { calcularNutricionalReceita } = useStore();
+  const { calcularNutricionalReceita, salvarVDReceita } = useStore();
   const [calculando, setCalculando] = useState(false);
+  const [salvandoVD, setSalvandoVD] = useState(false);
   const [faltantes, setFaltantes] = useState(null);
   const [erro, setErro] = useState("");
+  const [porcaoReferencia, setPorcaoReferencia] = useState(receita.nutricional?.porcao_referencia_gramas || "");
+  const [vdEditavel, setVdEditavel] = useState({}); // { nutriente: valorDigitado }
 
   const nutricional = receita.nutricional;
   const tabela = receita.tabela_nutricional || [];
 
   async function calcular() {
+    if (!porcaoReferencia || parseFloat(porcaoReferencia) <= 0) {
+      setErro("Informe a porção de referência (g) antes de calcular.");
+      return;
+    }
     setCalculando(true);
     setFaltantes(null);
     setErro("");
     try {
-      const resultado = await calcularNutricionalReceita(receita.id);
+      const resultado = await calcularNutricionalReceita(receita.id, parseFloat(porcaoReferencia) || 0);
       if (!resultado?.ok) {
         if (resultado?.faltantes?.length) {
           setFaltantes(resultado.faltantes);
         } else {
           setErro(resultado?.erro || "Não consegui calcular a nutricional dessa receita.");
         }
+      } else {
+        setVdEditavel({});
       }
     } catch (err) {
       console.error(err);
@@ -1543,26 +1552,59 @@ function NutricionalReceita({ receita }) {
     }
   }
 
+  async function salvarVD() {
+    const vd = tabela.map((n) => ({
+      nutriente: n.nutriente,
+      vd_percentual: vdEditavel[n.nutriente] !== undefined ? vdEditavel[n.nutriente] : n.vd_percentual || "",
+    }));
+    setSalvandoVD(true);
+    try {
+      const resultado = await salvarVDReceita(receita.id, vd);
+      if (resultado?.ok) setVdEditavel({});
+    } catch (err) {
+      console.error(err);
+      setErro("Deu erro ao salvar o %VD. Confira sua conexão com a planilha e tenta de novo.");
+    } finally {
+      setSalvandoVD(false);
+    }
+  }
+
+  const houveEdicaoVD = Object.keys(vdEditavel).length > 0;
+
   return (
     <div className="mt-5 border-t border-line pt-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm font-medium flex items-center gap-1.5">
           <ClipboardList size={14} className="text-gold" /> Nutricional da receita (recheio/massa)
         </p>
-        <button
-          type="button"
-          onClick={calcular}
-          disabled={calculando}
-          className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line hover:bg-gold-soft/30 disabled:opacity-60"
-        >
-          {calculando ? <Loader2 size={13} className="animate-spin" /> : <ClipboardList size={13} />}
-          {nutricional ? "Recalcular Nutricional" : "Calcular Nutricional"}
-        </button>
+        <div className="flex items-end gap-2">
+          <label className="text-xs text-muted">
+            Porção de referência (g)
+            <input
+              type="number"
+              step="0.1"
+              value={porcaoReferencia}
+              onChange={(e) => setPorcaoReferencia(e.target.value)}
+              placeholder="Ex: 50"
+              className="mt-1 block w-24 px-2 py-1.5 border border-line rounded-md text-xs"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={calcular}
+            disabled={calculando}
+            className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line hover:bg-gold-soft/30 disabled:opacity-60"
+          >
+            {calculando ? <Loader2 size={13} className="animate-spin" /> : <ClipboardList size={13} />}
+            {nutricional ? "Recalcular Nutricional" : "Calcular Nutricional"}
+          </button>
+        </div>
       </div>
 
       {nutricional && (
         <p className="text-[11px] text-muted mt-1.5">
           Calculado em {nutricional.data_calculo} · base: {formatNumber(nutricional.peso_base_gramas, 0)}g do lote (peso final do rendimento)
+          {nutricional.porcao_referencia_gramas ? ` · porção: ${formatNumber(nutricional.porcao_referencia_gramas, 0)}g` : ""}
         </p>
       )}
 
@@ -1583,22 +1625,48 @@ function NutricionalReceita({ receita }) {
       {erro && <p className="text-xs text-brick mt-2">{erro}</p>}
 
       {tabela.length > 0 ? (
-        <table className="w-full mt-3">
-          <thead>
-            <tr className="text-left text-[10px] uppercase text-muted border-b border-line">
-              <th className="py-1 font-medium">Nutriente</th>
-              <th className="py-1 font-medium text-right">Por 100g do recheio pronto</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tabela.map((n, i) => (
-              <tr key={i} className="border-b border-line/60 last:border-0">
-                <td className="py-1">{n.nutriente}</td>
-                <td className="py-1 text-right font-mono-num">{n.qtd_comparativa}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full mt-3">
+              <thead>
+                <tr className="text-left text-[10px] uppercase text-muted border-b border-line">
+                  <th className="py-1 font-medium">Nutriente</th>
+                  <th className="py-1 font-medium text-right">Qtd. comparativa (100g)</th>
+                  <th className="py-1 font-medium text-right">Porção</th>
+                  <th className="py-1 font-medium text-right">%VD</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tabela.map((n, i) => (
+                  <tr key={i} className="border-b border-line/60 last:border-0">
+                    <td className="py-1">{n.nutriente}</td>
+                    <td className="py-1 text-right font-mono-num">{n.qtd_comparativa}</td>
+                    <td className="py-1 text-right font-mono-num">{n.porcao}</td>
+                    <td className="py-1 text-right">
+                      <input
+                        value={vdEditavel[n.nutriente] !== undefined ? vdEditavel[n.nutriente] : (n.vd_percentual || "")}
+                        onChange={(e) => setVdEditavel((prev) => ({ ...prev, [n.nutriente]: e.target.value }))}
+                        placeholder="—"
+                        className="w-16 px-1.5 py-0.5 border border-line rounded text-xs text-right font-mono-num"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex justify-end mt-2">
+            <button
+              type="button"
+              onClick={salvarVD}
+              disabled={!houveEdicaoVD || salvandoVD}
+              className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-sage text-white hover:opacity-90 disabled:opacity-40"
+            >
+              {salvandoVD && <Loader2 size={13} className="animate-spin" />}
+              Salvar %VD
+            </button>
+          </div>
+        </>
       ) : (
         !faltantes && <p className="text-xs text-muted mt-2">Ainda não calculada.</p>
       )}
