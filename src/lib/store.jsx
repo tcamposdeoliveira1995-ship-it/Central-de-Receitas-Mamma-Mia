@@ -583,9 +583,12 @@ export function StoreProvider({ children }) {
   // Diferente das outras funções daqui: NÃO atualiza o estado local antes de
   // chamar o backend, porque o cálculo pode ser bloqueado (faltar nutricional
   // de algum ingrediente) — só aplica na tela quando o backend confirma "ok".
-  const calcularNutricionalReceita = useCallback(async (receitaId) => {
+  const calcularNutricionalReceita = useCallback(async (receitaId, porcaoReferenciaGramas) => {
     if (!isDemoMode) {
-      const resultado = await postAction("calcularNutricionalReceita", { receita_id: receitaId });
+      const resultado = await postAction("calcularNutricionalReceita", {
+        receita_id: receitaId,
+        porcao_referencia_gramas: porcaoReferenciaGramas || 0,
+      });
       if (resultado && resultado.ok) {
         setReceitas((prev) =>
           prev.map((r) =>
@@ -595,6 +598,7 @@ export function StoreProvider({ children }) {
                   nutricional: {
                     data_calculo: resultado.data_calculo,
                     peso_base_gramas: resultado.peso_base_gramas,
+                    porcao_referencia_gramas: resultado.porcao_referencia_gramas,
                     status: "ok",
                   },
                   tabela_nutricional: resultado.tabela || [],
@@ -609,6 +613,20 @@ export function StoreProvider({ children }) {
     // Modo demonstração: as matérias-primas de exemplo não têm nutricional
     // cadastrada, então não dá pra calcular de verdade — avisa igual o backend faria.
     return { ok: false, erro: "Cálculo nutricional não disponível no modo demonstração." };
+  }, []);
+
+  // Atualiza só o %VD das linhas já calculadas (não recalcula qtd./porção).
+  const salvarVDReceita = useCallback(async (receitaId, vd) => {
+    if (!isDemoMode) {
+      const resultado = await postAction("salvarVDReceita", { receita_id: receitaId, vd });
+      if (resultado && resultado.ok) {
+        setReceitas((prev) =>
+          prev.map((r) => (r.id === receitaId ? { ...r, tabela_nutricional: resultado.tabela || [] } : r))
+        );
+      }
+      return resultado;
+    }
+    return { ok: false, erro: "Não disponível no modo demonstração." };
   }, []);
 
   // ── SETORES (etapa do processo: Produção, Forno/Congelamento, Expedição etc.) ──
@@ -716,6 +734,7 @@ export function StoreProvider({ children }) {
     salvarInfoNutricional,
     salvarNutricionalMateriaPrima,
     calcularNutricionalReceita,
+    salvarVDReceita,
     adicionarSetor,
     atualizarSetor,
     excluirSetor,
