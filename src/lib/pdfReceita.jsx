@@ -311,6 +311,32 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
           </>
         ) : null}
 
+        {(receita.tabela_nutricional || []).length > 0 ? (
+          <>
+            <Text style={styles.secaoTitulo}>Nutricional da receita (recheio/massa)</Text>
+            {receita.nutricional ? (
+              <Text style={{ fontSize: 8.5, color: CORES.muted, marginBottom: 6 }}>
+                Calculado em {receita.nutricional.data_calculo} · base: {formatNumber(receita.nutricional.peso_base_gramas, 0)}g do lote
+                {receita.nutricional.porcao_referencia_gramas ? ` · porção: ${formatNumber(receita.nutricional.porcao_referencia_gramas, 0)}g` : ""}
+              </Text>
+            ) : null}
+            <View style={styles.nutriHeader}>
+              <Text style={[styles.nutriHeaderCel, styles.nutriNome]}>Nutriente</Text>
+              <Text style={[styles.nutriHeaderCel, styles.nutriQtd]}>Qtd. comp. (100g)</Text>
+              <Text style={[styles.nutriHeaderCel, styles.nutriPorcao]}>Porção</Text>
+              <Text style={[styles.nutriHeaderCel, styles.nutriVd]}>%VD</Text>
+            </View>
+            {receita.tabela_nutricional.map((n, i) => (
+              <View style={styles.nutriLinha} key={i}>
+                <Text style={styles.nutriNome}>{n.nutriente}</Text>
+                <Text style={styles.nutriQtd}>{n.qtd_comparativa}</Text>
+                <Text style={styles.nutriPorcao}>{n.porcao}</Text>
+                <Text style={styles.nutriVd}>{n.vd_percentual || "-"}</Text>
+              </View>
+            ))}
+          </>
+        ) : null}
+
         {(receita.produtos || []).length > 0 ? (
           <>
             <Text style={styles.secaoTitulo}>Produtos / Informação nutricional</Text>
