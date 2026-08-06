@@ -10,7 +10,7 @@ function gerarLinhaId() {
 }
 
 export default function ProducoesPage() {
-  const { producoes, receitas, funcionarios, adicionarProducao } = useStore();
+  const { producoes, receitas, funcionarios, setores, adicionarProducao } = useStore();
   const [mostrarForm, setMostrarForm] = useState(false);
 
   const nomeReceita = (id) => receitas.find((r) => r.id === id)?.nome || "—";
@@ -37,6 +37,7 @@ export default function ProducoesPage() {
         <NovaProducaoForm
           receitas={receitas}
           funcionarios={funcionarios}
+          setores={setores}
           onSalvar={async (dados) => {
             await adicionarProducao(dados);
             setMostrarForm(false);
@@ -88,7 +89,7 @@ export default function ProducoesPage() {
                       <>
                         <span className="font-mono-num font-medium text-gold">{formatBRL(mod.custo_total)}</span>
                         <p className="text-xs text-muted mt-0.5">
-                          {mod.itens.map((i) => `${i.funcao_nome || "—"} (${formatNumber(i.tempo_minutos_real, 0)} min · ${i.quantidade_pessoas}p)`).join(" + ")}
+                          {mod.itens.map((i) => `${i.setor_nome ? i.setor_nome + " · " : ""}${i.funcao_nome || "—"} (${formatNumber(i.tempo_minutos_real, 0)} min · ${i.quantidade_pessoas}p)`).join(" + ")}
                         </p>
                       </>
                     ) : (
@@ -113,7 +114,7 @@ export default function ProducoesPage() {
   );
 }
 
-function NovaProducaoForm({ receitas, funcionarios, onSalvar, onCancelar }) {
+function NovaProducaoForm({ receitas, funcionarios, setores, onSalvar, onCancelar }) {
   const [receitaId, setReceitaId] = useState(receitas[0]?.id || "");
   const [data, setData] = useState(new Date().toISOString().slice(0, 10));
   const [lote, setLote] = useState("");
@@ -125,17 +126,10 @@ function NovaProducaoForm({ receitas, funcionarios, onSalvar, onCancelar }) {
   const receita = receitas.find((r) => r.id === receitaId);
   const teoricaDaReceita = receita?.rendimento?.quantidade_produzida || 0;
 
-  // MOD real — pré-preenche a LISTA de funções com a mesma quantidade de
-  // pessoas estimada na receita (se tiver), mas o tempo real de cada linha
-  // fica em branco pra ser preenchido de verdade nesse lote.
-  const [modItens, setModItens] = useState(() =>
-    (receita?.mod?.itens || []).map((i) => ({
-      linha_id: gerarLinhaId(),
-      funcao_id: i.funcao_id,
-      quantidade_pessoas: i.quantidade_pessoas,
-      tempo_minutos_real: "",
-    }))
-  );
+  // MOD real desse lote — genérica por Receita (não por Produto/SKU), então
+  // começa vazia: cada linha é preenchida na mão com setor, função, pessoas
+  // e tempo real gasto.
+  const [modItens, setModItens] = useState([]);
 
   function num(v) {
     const n = parseFloat(String(v).replace(/\./g, "").replace(",", "."));
@@ -146,18 +140,10 @@ function NovaProducaoForm({ receitas, funcionarios, onSalvar, onCancelar }) {
     setReceitaId(id);
     const r = receitas.find((rr) => rr.id === id);
     setPesoUnitario(r?.peso_unitario || "");
-    setModItens(
-      (r?.mod?.itens || []).map((i) => ({
-        linha_id: gerarLinhaId(),
-        funcao_id: i.funcao_id,
-        quantidade_pessoas: i.quantidade_pessoas,
-        tempo_minutos_real: "",
-      }))
-    );
   }
 
   function adicionarLinhaMOD() {
-    setModItens((prev) => [...prev, { linha_id: gerarLinhaId(), funcao_id: "", quantidade_pessoas: 1, tempo_minutos_real: "" }]);
+    setModItens((prev) => [...prev, { linha_id: gerarLinhaId(), setor_id: "", funcao_id: "", quantidade_pessoas: 1, tempo_minutos_real: "" }]);
   }
 
   function alterarLinhaMOD(linhaId, campo, valor) {
@@ -169,6 +155,7 @@ function NovaProducaoForm({ receitas, funcionarios, onSalvar, onCancelar }) {
   }
 
   const funcionariosAtivos = funcionarios.filter((f) => (f.status || "ativo") === "ativo");
+  const setoresAtivos = (setores || []).filter((s) => (s.status || "ativo") === "ativo");
   const custoModPreviewTotal = modItens.reduce((soma, item) => {
     const custoHora = funcionarios.find((f) => f.id === item.funcao_id)?.custo_hora || 0;
     return soma + custoHora * num(item.quantidade_pessoas) * (num(item.tempo_minutos_real) / 60);
@@ -188,6 +175,7 @@ function NovaProducaoForm({ receitas, funcionarios, onSalvar, onCancelar }) {
       peso_unitario_kg: num(pesoUnitario),
       peso_massa_real: pesoMassaReal,
       mod_itens: modItens.map((i) => ({
+        setor_id: i.setor_id,
         funcao_id: i.funcao_id,
         quantidade_pessoas: num(i.quantidade_pessoas),
         tempo_minutos_real: num(i.tempo_minutos_real),
@@ -302,7 +290,19 @@ function NovaProducaoForm({ receitas, funcionarios, onSalvar, onCancelar }) {
           <>
             <div className="space-y-2">
               {modItens.map((item) => (
-                <div key={item.linha_id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_auto] gap-2 items-end">
+                <div key={item.linha_id} className="grid grid-cols-1 sm:grid-cols-[1.2fr_1.2fr_0.8fr_0.9fr_auto] gap-2 items-end">
+                  <Campo label="Setor">
+                    <select
+                      value={item.setor_id || ""}
+                      onChange={(e) => alterarLinhaMOD(item.linha_id, "setor_id", e.target.value)}
+                      className="w-full px-2 py-1.5 rounded-md border border-line text-sm"
+                    >
+                      <option value="">Selecione...</option>
+                      {setoresAtivos.map((s) => (
+                        <option key={s.id} value={s.id}>{s.nome}</option>
+                      ))}
+                    </select>
+                  </Campo>
                   <Campo label="Função responsável">
                     <select
                       value={item.funcao_id}
