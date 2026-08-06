@@ -442,6 +442,7 @@ export function StoreProvider({ children }) {
       receita_id: receitaId,
       info_nutricional: null,
       tabela_nutricional: [],
+      mod: { itens: [], custo_total: 0 },
       ...dados,
     };
     setReceitas((prev) =>
@@ -480,6 +481,42 @@ export function StoreProvider({ children }) {
       }
     },
     []
+  );
+
+  // ── MOD/HHT ESTIMADA DO PRODUTO/SKU ────────────────────────────────
+  // Cada Produto tem sua própria lista de MOD (Setor + Função + Pessoas +
+  // Tempo) — diferente da Receita, porque produtos da mesma receita podem
+  // passar por processos diferentes (ex: um vai ao forno, outro não). O
+  // custo ainda é dividido por unidade (rendimento da receita), não fechado
+  // por pacote.
+  const atualizarMODProduto = useCallback(
+    async (receitaId, produtoId, itens) => {
+      const itensCalculados = montarListaMOD(itens, "tempo_minutos", "custo_estimado");
+      const custoTotal = itensCalculados.reduce((soma, i) => soma + (i.custo_estimado || 0), 0);
+      const mod = { itens: itensCalculados, custo_total: custoTotal };
+      setReceitas((prev) =>
+        prev.map((r) =>
+          r.id === receitaId
+            ? { ...r, produtos: (r.produtos || []).map((p) => (p.id === produtoId ? { ...p, mod } : p)) }
+            : r
+        )
+      );
+
+      if (!isDemoMode) {
+        await enfileirar(`modproduto:${produtoId}`, () =>
+          postAction("updateModProduto", {
+            produto_id: produtoId,
+            itens: (itens || []).map((i) => ({
+              setor_id: i.setor_id || "",
+              funcao_id: i.funcao_id || "",
+              quantidade_pessoas: i.quantidade_pessoas || 0,
+              tempo_minutos: i.tempo_minutos || 0,
+            })),
+          })
+        );
+      }
+    },
+    [enfileirar, montarListaMOD]
   );
 
   // Salva ingredientes/alérgicos + a tabela nutricional inteira de um produto
@@ -643,6 +680,7 @@ export function StoreProvider({ children }) {
     adicionarProduto,
     atualizarProduto,
     excluirProduto,
+    atualizarMODProduto,
     salvarInfoNutricional,
     salvarNutricionalMateriaPrima,
     adicionarSetor,
