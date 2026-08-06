@@ -1607,6 +1607,11 @@ function NutricionalReceita({ receita }) {
           {nutricional.porcao_referencia_gramas ? ` · porção: ${formatNumber(nutricional.porcao_referencia_gramas, 0)}g` : ""}
         </p>
       )}
+      {nutricional && (
+        <p className="text-[11px] text-muted mt-0.5">
+          %VD calculado automaticamente pelos Valores Diários de Referência da Anvisa (RDC 429/2020). Açúcares e gordura trans não têm VD oficial — ficam editáveis manualmente.
+        </p>
+      )}
 
       {faltantes && faltantes.length > 0 && (
         <div className="mt-2 text-xs bg-brick/10 border border-brick/30 text-brick rounded-md px-3 py-2">
