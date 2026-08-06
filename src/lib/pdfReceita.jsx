@@ -238,13 +238,6 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
   const celQtde = mostrarCustos ? styles.celQtde : styles.celQtdeSemCusto;
   const celUnid = mostrarCustos ? styles.celUnid : styles.celUnidSemCusto;
 
-  // Custo de mão de obra (MOD) estimado, cadastrado na receita (soma de todas
-  // as funções da lista) — soma ao CMV de ingredientes/embalagem só na
-  // versão do PDF que mostra custos.
-  const custoMOD = receita.mod?.custo_total || 0;
-  const custoTotalComMOD = cmv.custoTotal + custoMOD;
-  const cmvUnitarioComMOD = cmv.cmvUnitario + (quantidadeProducao > 0 ? custoMOD / quantidadeProducao : 0);
-
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -296,27 +289,18 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
                 <Text style={styles.totalValor}>{formatBRL(cmv.custoEmbalagem)}</Text>
               </View>
               <View style={styles.totalBloco}>
-                <Text style={styles.totalLabel}>Mão de obra</Text>
-                <Text style={styles.totalValor}>{formatBRL(custoMOD)}</Text>
-              </View>
-              <View style={styles.totalBloco}>
-                <Text style={styles.totalLabel}>Total (c/ MOD)</Text>
-                <Text style={styles.totalValor}>{formatBRL(custoTotalComMOD)}</Text>
+                <Text style={styles.totalLabel}>Total</Text>
+                <Text style={styles.totalValor}>{formatBRL(cmv.custoTotal)}</Text>
               </View>
             </View>
 
             <View style={styles.cmvDestaque}>
-              <Text style={styles.cmvLabel}>CMV unitário c/ MOD (produção prevista: {formatNumber(quantidadeProducao, 0)} un)</Text>
-              <Text style={styles.cmvValor}>{formatBRL(cmvUnitarioComMOD)}</Text>
+              <Text style={styles.cmvLabel}>CMV unitário (produção prevista: {formatNumber(quantidadeProducao, 0)} un)</Text>
+              <Text style={styles.cmvValor}>{formatBRL(cmv.cmvUnitario)}</Text>
             </View>
-
-            {receita.mod?.itens?.length > 0 && (
-              <Text style={{ fontSize: 8.5, color: CORES.muted, marginTop: 6 }}>
-                Mão de obra: {receita.mod.itens
-                  .map((i) => `${i.funcao_nome || "—"} (${formatNumber(i.tempo_minutos, 0)} min · ${i.quantidade_pessoas}p)`)
-                  .join(" + ")}
-              </Text>
-            )}
+            <Text style={{ fontSize: 8.5, color: CORES.muted, marginTop: 6 }}>
+              A mão de obra (MOD) é calculada por Produto/SKU — veja o custo do pacote de cada um logo abaixo.
+            </Text>
           </>
         )}
 
@@ -380,16 +364,29 @@ export function FichaReceitaPDF({ receita, itens, cmv, quantidadeProducao, nomeI
                     {produto.info_nutricional.apelido ? (
                       <Text style={styles.apelidoTexto}>Apelido: {produto.info_nutricional.apelido}</Text>
                     ) : null}
-                    {mostrarCustos && parseFloat(produto.info_nutricional.medida_caseira) > 0 ? (
-                      <Text style={styles.custoPacoteTexto}>
-                        Qtde. PCT: {parseFloat(produto.info_nutricional.medida_caseira)} · Custo do pacote (CMV unit. c/ MOD × Qtde. PCT): {formatBRL(cmvUnitarioComMOD * parseFloat(produto.info_nutricional.medida_caseira))}
-                      </Text>
-                    ) : null}
+                    {mostrarCustos && parseFloat(produto.info_nutricional.medida_caseira) > 0 ? (() => {
+                      const custoModProduto = produto.mod?.custo_total || 0;
+                      const custoModPorUnidade = quantidadeProducao > 0 ? custoModProduto / quantidadeProducao : 0;
+                      const cmvUnitarioComMODProduto = cmv.cmvUnitario + custoModPorUnidade;
+                      const qtdePct = parseFloat(produto.info_nutricional.medida_caseira);
+                      return (
+                        <Text style={styles.custoPacoteTexto}>
+                          Qtde. PCT: {qtdePct} · Custo do pacote (CMV unit. c/ MOD × Qtde. PCT): {formatBRL(cmvUnitarioComMODProduto * qtdePct)}
+                        </Text>
+                      );
+                    })() : null}
                     {produto.info_nutricional.ingredientes_texto ? (
                       <Text style={styles.ingredientesTexto}>{produto.info_nutricional.ingredientes_texto}</Text>
                     ) : null}
                     {produto.info_nutricional.alergicos_texto ? (
                       <Text style={styles.alergicosTexto}>{produto.info_nutricional.alergicos_texto}</Text>
+                    ) : null}
+                    {mostrarCustos && produto.mod?.itens?.length > 0 ? (
+                      <Text style={{ fontSize: 8.5, color: CORES.muted, marginTop: 3 }}>
+                        Mão de obra: {produto.mod.itens
+                          .map((i) => `${i.setor_nome ? i.setor_nome + " · " : ""}${i.funcao_nome || "—"} (${formatNumber(i.tempo_minutos, 0)} min · ${i.quantidade_pessoas}p)`)
+                          .join(" + ")}
+                      </Text>
                     ) : null}
                   </>
                 ) : null}
