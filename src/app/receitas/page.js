@@ -538,6 +538,8 @@ function ReceitaDetalhe({ receita }) {
         </div>
       </div>
 
+      <NutricionalReceita receita={receita} />
+
       <ProdutosSKU
         receitaId={receita.id}
         produtos={receita.produtos}
@@ -1501,6 +1503,105 @@ function LupaRotulagem({ alertas }) {
           ))}
         </div>
       ))}
+    </div>
+  );
+}
+
+// Nutricional CALCULADA da própria receita (ex: um recheio, uma massa) —
+// diferente do NutricionalProduto abaixo, que é preenchido manualmente por
+// SKU. Aqui o valor vem automaticamente da nutricional já cadastrada de cada
+// ingrediente (matéria-prima ou sub-receita), ponderada pela quantidade
+// usada e normalizada pelo peso final do rendimento. É uma "foto": só
+// recalcula quando o botão é clicado.
+function NutricionalReceita({ receita }) {
+  const { calcularNutricionalReceita } = useStore();
+  const [calculando, setCalculando] = useState(false);
+  const [faltantes, setFaltantes] = useState(null);
+  const [erro, setErro] = useState("");
+
+  const nutricional = receita.nutricional;
+  const tabela = receita.tabela_nutricional || [];
+
+  async function calcular() {
+    setCalculando(true);
+    setFaltantes(null);
+    setErro("");
+    try {
+      const resultado = await calcularNutricionalReceita(receita.id);
+      if (!resultado?.ok) {
+        if (resultado?.faltantes?.length) {
+          setFaltantes(resultado.faltantes);
+        } else {
+          setErro(resultado?.erro || "Não consegui calcular a nutricional dessa receita.");
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setErro("Deu erro ao calcular. Confira sua conexão com a planilha e tenta de novo.");
+    } finally {
+      setCalculando(false);
+    }
+  }
+
+  return (
+    <div className="mt-5 border-t border-line pt-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-sm font-medium flex items-center gap-1.5">
+          <ClipboardList size={14} className="text-gold" /> Nutricional da receita (recheio/massa)
+        </p>
+        <button
+          type="button"
+          onClick={calcular}
+          disabled={calculando}
+          className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line hover:bg-gold-soft/30 disabled:opacity-60"
+        >
+          {calculando ? <Loader2 size={13} className="animate-spin" /> : <ClipboardList size={13} />}
+          {nutricional ? "Recalcular Nutricional" : "Calcular Nutricional"}
+        </button>
+      </div>
+
+      {nutricional && (
+        <p className="text-[11px] text-muted mt-1.5">
+          Calculado em {nutricional.data_calculo} · base: {formatNumber(nutricional.peso_base_gramas, 0)}g do lote (peso final do rendimento)
+        </p>
+      )}
+
+      {faltantes && faltantes.length > 0 && (
+        <div className="mt-2 text-xs bg-brick/10 border border-brick/30 text-brick rounded-md px-3 py-2">
+          <p className="font-medium mb-1">Não deu pra calcular — falta nutricional cadastrada de:</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            {faltantes.map((f, i) => (
+              <li key={i}>{f}</li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[11px]">
+            Cadastre a nutricional dessas matérias-primas (ou calcule a nutricional da sub-receita faltante primeiro) e tente de novo.
+          </p>
+        </div>
+      )}
+
+      {erro && <p className="text-xs text-brick mt-2">{erro}</p>}
+
+      {tabela.length > 0 ? (
+        <table className="w-full mt-3">
+          <thead>
+            <tr className="text-left text-[10px] uppercase text-muted border-b border-line">
+              <th className="py-1 font-medium">Nutriente</th>
+              <th className="py-1 font-medium text-right">Por 100g do recheio pronto</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tabela.map((n, i) => (
+              <tr key={i} className="border-b border-line/60 last:border-0">
+                <td className="py-1">{n.nutriente}</td>
+                <td className="py-1 text-right font-mono-num">{n.qtd_comparativa}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        !faltantes && <p className="text-xs text-muted mt-2">Ainda não calculada.</p>
+      )}
     </div>
   );
 }
