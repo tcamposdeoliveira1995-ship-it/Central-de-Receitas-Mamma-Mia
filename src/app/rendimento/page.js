@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Save, Check, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Save, Check, Loader2, Search } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { calcularCMV, calcularRendimento, pesoTotalIngredientes, formatBRL, formatNumber } from "@/lib/calc";
+import { TIPOS_RECEITA, LABEL_TIPO_RECEITA } from "@/lib/tiposReceita";
 
 // Atalhos de padronização de embalagem — clicar já preenche peso unitário
 // (kg) e o nome da unidade de uma vez, pra não digitar toda vez e manter o
@@ -14,10 +15,35 @@ const PRESETS_EMBALAGEM = [
   { label: "Soja — pacote de 2kg", pesoUnitario: 2, unidadeNome: "pacote de 2kg" },
 ];
 
+// Ignora acento/maiúscula pra busca por nome não depender de digitar
+// exatamente igual (ex: "acem" acha "Acém").
+function normalizarTexto(texto) {
+  return (texto || "")
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 export default function RendimentoPage() {
   const { receitas, materiasPrimasById, receitasById, atualizarRendimentoReceita } = useStore();
+  const [tipoFiltro, setTipoFiltro] = useState(""); // "" = todos os tipos
+  const [busca, setBusca] = useState("");
   const [receitaId, setReceitaId] = useState(receitas[0]?.id ?? "");
   const receita = receitas.find((r) => r.id === receitaId);
+
+  const receitasFiltradas = useMemo(() => {
+    const buscaNormalizada = normalizarTexto(busca);
+    return [...receitas]
+      .filter((r) => !tipoFiltro || r.papel === tipoFiltro)
+      .filter(
+        (r) =>
+          !buscaNormalizada ||
+          normalizarTexto(r.nome).includes(buscaNormalizada) ||
+          normalizarTexto(r.codigo).includes(buscaNormalizada)
+      )
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }));
+  }, [receitas, tipoFiltro, busca]);
 
   const [pesos, setPesos] = useState(() => ({
     pesoIngredientes: receita?.rendimento?.peso_ingredientes || 0,
@@ -39,6 +65,16 @@ export default function RendimentoPage() {
     });
     setSalvo(false);
   }
+
+  // Se a receita selecionada sumiu da lista filtrada (mudou o tipo ou a
+  // busca), seleciona a primeira da lista filtrada automaticamente — evita
+  // ficar com uma receita "escondida" selecionada sem aparecer no filtro.
+  useEffect(() => {
+    if (receitasFiltradas.length === 0) return;
+    if (receitasFiltradas.some((r) => r.id === receitaId)) return;
+    selecionarReceita(receitasFiltradas[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [receitasFiltradas]);
 
   const cmv = useMemo(() => {
     if (!receita) return { custoTotal: 0 };
@@ -106,18 +142,66 @@ export default function RendimentoPage() {
         </p>
       </header>
 
-      <label className="text-xs text-muted block mb-4">
-        Receita
-        <select
-          value={receitaId}
-          onChange={(e) => selecionarReceita(e.target.value)}
-          className="mt-1 block px-3 py-2 rounded-md border border-line text-sm w-72"
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <span className="text-xs uppercase tracking-wide text-muted mr-1">Tipo:</span>
+        <button
+          type="button"
+          onClick={() => setTipoFiltro("")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+            tipoFiltro === ""
+              ? "border-sage bg-sage-soft text-sage"
+              : "border-line text-muted hover:bg-gold-soft/30"
+          }`}
         >
-          {receitas.map((r) => (
-            <option key={r.id} value={r.id}>{r.nome}</option>
-          ))}
-        </select>
-      </label>
+          Todos
+        </button>
+        {TIPOS_RECEITA.map((tipo) => {
+          const selecionado = tipoFiltro === tipo.value;
+          return (
+            <button
+              key={tipo.value}
+              type="button"
+              onClick={() => setTipoFiltro(selecionado ? "" : tipo.value)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                selecionado
+                  ? "border-sage bg-sage-soft text-sage"
+                  : "border-line text-muted hover:bg-gold-soft/30"
+              }`}
+            >
+              <tipo.icone size={14} className={selecionado ? "text-sage" : "text-muted"} />
+              {tipo.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="relative flex-1 min-w-[220px] max-w-xs">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+          <input
+            type="text"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome ou código..."
+            className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-line text-sm bg-surface focus:outline-none focus:ring-1 focus:ring-gold"
+          />
+        </div>
+
+        <label className="text-xs text-muted flex items-center gap-2">
+          Receita
+          <select
+            value={receitaId}
+            onChange={(e) => selecionarReceita(e.target.value)}
+            className="px-3 py-2 rounded-md border border-line text-sm w-72"
+            disabled={receitasFiltradas.length === 0}
+          >
+            {receitasFiltradas.length === 0 && <option value="">Nenhuma receita com esse filtro</option>}
+            {receitasFiltradas.map((r) => (
+              <option key={r.id} value={r.id}>{r.nome}</option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {receita && (
         <>
