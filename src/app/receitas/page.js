@@ -190,7 +190,7 @@ export default function ReceitasPage() {
 
         <div className="lg:col-span-2">
           {selecionada ? (
-            <ReceitaDetalhe receita={selecionada} onAbrirReceita={setSelecionadaId} />
+            <ReceitaDetalhe receita={selecionada} />
           ) : (
             <div className="bg-surface border border-line rounded-lg p-8 text-center text-sm text-muted">
               Selecione ou crie uma receita.
@@ -202,87 +202,7 @@ export default function ReceitasPage() {
   );
 }
 
-// ── ÁRVORE DE USO — "onde essa receita é usada" ────────────────────
-// Caminho inverso do que a tela normalmente mostra: em vez de "o que entra
-// nessa receita", mostra "em quais outras receitas essa entra como
-// sub-receita", recursivamente, até chegar nos Produtos/SKUs finais. Usa
-// um Set de visitados pra nunca entrar em loop infinito se alguma receita
-// acabar se referenciando (direta ou indiretamente) — não deveria acontecer,
-// mas é dado editado à mão, então mais vale prevenir.
-function construirArvoreUso(receitaId, receitas, visitados = new Set()) {
-  if (visitados.has(receitaId)) return [];
-  const novosVisitados = new Set(visitados);
-  novosVisitados.add(receitaId);
-
-  const usosDiretos = receitas.filter((r) =>
-    (r.itens || []).some((i) => i.tipo === "receita" && i.materia_prima_id === receitaId)
-  );
-
-  return usosDiretos.map((r) => ({
-    receita: r,
-    produtos: r.produtos || [],
-    filhos: construirArvoreUso(r.id, receitas, novosVisitados),
-  }));
-}
-
-function contarProdutosFinais(nos) {
-  return nos.reduce((soma, no) => soma + no.produtos.length + contarProdutosFinais(no.filhos), 0);
-}
-
-function ArvoreUso({ receita, receitas, onAbrirReceita }) {
-  const arvore = useMemo(() => construirArvoreUso(receita.id, receitas), [receita.id, receitas]);
-  const totalProdutosFinais = useMemo(() => contarProdutosFinais(arvore), [arvore]);
-
-  if (arvore.length === 0) return null;
-
-  return (
-    <div className="mt-4 bg-gold-soft/20 border border-line rounded-lg p-4">
-      <div className="flex items-center gap-2 mb-1">
-        <Layers size={14} className="text-gold" />
-        <h3 className="text-sm font-medium">Onde essa receita é usada</h3>
-      </div>
-      <p className="text-xs text-muted mb-3">
-        {totalProdutosFinais > 0
-          ? `Chega em ${totalProdutosFinais} produto${totalProdutosFinais === 1 ? "" : "s"}/SKU${totalProdutosFinais === 1 ? "" : "s"} através da cadeia abaixo.`
-          : "Usada em outras receitas, mas nenhuma delas (ainda) tem produto/SKU vinculado."}
-      </p>
-      <NosArvoreUso nos={arvore} onAbrirReceita={onAbrirReceita} />
-    </div>
-  );
-}
-
-function NosArvoreUso({ nos, onAbrirReceita, nivel = 0 }) {
-  return (
-    <ul className={nivel === 0 ? "space-y-1.5" : "space-y-1.5 mt-1.5 ml-4 border-l border-line pl-3"}>
-      {nos.map((no) => (
-        <li key={no.receita.id}>
-          <button
-            type="button"
-            onClick={() => onAbrirReceita?.(no.receita.id)}
-            className="text-sm text-left hover:text-sage flex items-center gap-1.5"
-          >
-            <Layers size={12} className="text-muted shrink-0" />
-            <span className="hover:underline">{no.receita.nome}</span>
-            <span className="text-xs text-muted font-mono-num">{no.receita.codigo}</span>
-          </button>
-          {no.produtos.length > 0 && (
-            <ul className="ml-5 mt-1 space-y-0.5">
-              {no.produtos.map((p) => (
-                <li key={p.id} className="text-xs text-muted flex items-center gap-1.5">
-                  <Package size={11} className="text-gold shrink-0" />
-                  {p.nome_produto} <span className="font-mono-num">{p.codigo}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {no.filhos.length > 0 && <NosArvoreUso nos={no.filhos} onAbrirReceita={onAbrirReceita} nivel={nivel + 1} />}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ReceitaDetalhe({ receita, onAbrirReceita }) {
+function ReceitaDetalhe({ receita }) {
   const {
     materiasPrimas,
     materiasPrimasById,
@@ -649,8 +569,6 @@ function ReceitaDetalhe({ receita, onAbrirReceita }) {
           })}
         </div>
       </div>
-
-      <ArvoreUso receita={receita} receitas={receitas} onAbrirReceita={onAbrirReceita} />
 
       <NutricionalReceita receita={receita} />
 
