@@ -64,7 +64,7 @@ function exportarCSV(linhas) {
       LABEL_TIPO_RECEITA[r.papel] || r.papel || "",
       r.cmv.custoIngredientes.toFixed(2).replace(".", ","),
       r.cmv.custoTotal.toFixed(2).replace(".", ","),
-      `${r.quantidadeProducao} un`,
+      `${r.quantidadeProducao} ${r.unidadeProducao}`,
       r.cmv.cmvUnitario.toFixed(2).replace(".", ","),
       r.qtdProdutos > 0 ? r.qtdProdutos : "",
     ]
@@ -104,7 +104,8 @@ export default function CMVPage() {
           receitasById,
         });
         const qtdProdutos = (r.produtos || []).length;
-        return { ...r, cmv, quantidadeProducao, qtdProdutos };
+        const unidadeProducao = r.rendimento?.unidade_nome || "un";
+        return { ...r, cmv, quantidadeProducao, qtdProdutos, unidadeProducao };
       }),
     [receitas, materiasPrimasById, receitasById]
   );
@@ -272,7 +273,7 @@ export default function CMVPage() {
                   </td>
                   <td className="px-5 py-3 text-right font-mono-num">{formatBRL(r.cmv.custoIngredientes)}</td>
                   <td className="px-5 py-3 text-right font-mono-num font-medium">{formatBRL(r.cmv.custoTotal)}</td>
-                  <td className="px-5 py-3 text-right font-mono-num text-muted">{r.quantidadeProducao} un</td>
+                  <td className="px-5 py-3 text-right font-mono-num text-muted">{r.quantidadeProducao} {r.unidadeProducao}</td>
                   <td className="px-5 py-3 text-right font-mono-num text-gold font-semibold">
                     {formatBRL(r.cmv.cmvUnitario)}
                   </td>
