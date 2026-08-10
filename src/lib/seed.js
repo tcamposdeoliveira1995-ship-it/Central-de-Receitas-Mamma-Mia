@@ -139,6 +139,9 @@ export const funcionarios = [];
 // Setores/etapas do processo (MOD/HHT) — sem dados de exemplo por enquanto.
 export const setores = [];
 
+// Módulo Produtos (composição a partir de receitas) — sem dados de exemplo por enquanto.
+export const produtos = [];
+
 export const producoes = [
   {
     id: "prod-1",
