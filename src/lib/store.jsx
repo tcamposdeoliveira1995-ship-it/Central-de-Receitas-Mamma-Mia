@@ -226,6 +226,13 @@ export function StoreProvider({ children }) {
     return item;
   }, []);
 
+  const excluirReceita = useCallback(async (receitaId) => {
+    setReceitas((prev) => prev.filter((r) => r.id !== receitaId));
+    if (!isDemoMode) {
+      await postAction("deleteReceita", { id: receitaId });
+    }
+  }, []);
+
   const atualizarItensReceita = useCallback(
     async (receitaId, itens) => {
       setReceitas((prev) => prev.map((r) => (r.id === receitaId ? { ...r, itens } : r)));
@@ -788,6 +795,7 @@ export function StoreProvider({ children }) {
     adicionarApresentacao,
     adicionarRendimentoMP,
     adicionarReceita,
+    excluirReceita,
     atualizarItensReceita,
     enviarFichaPdf,
     atualizarRendimentoReceita,
