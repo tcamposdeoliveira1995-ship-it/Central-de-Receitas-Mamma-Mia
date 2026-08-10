@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Beef, BookOpen, Calculator, Percent, Factory, Flame, Snowflake, Menu, X, Users, Workflow } from "lucide-react";
+import { LayoutGrid, Beef, BookOpen, Calculator, Percent, Factory, Flame, Snowflake, Menu, X, Users, Workflow, Package } from "lucide-react";
 import { isDemoMode } from "@/lib/sheetsClient";
 
 const links = [
@@ -17,6 +17,7 @@ const links = [
   { href: "/rendimento-coccao", label: "Rendimento de Cocção", icon: Flame },
   { href: "/recheio-frio", label: "Recheio Frio — Embutidos", icon: Snowflake },
   { href: "/producoes", label: "Produções", icon: Factory },
+  { href: "/produtos", label: "Produtos", icon: Package },
 ];
 
 export default function Sidebar() {
