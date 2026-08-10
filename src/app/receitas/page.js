@@ -209,12 +209,14 @@ function ReceitaDetalhe({ receita }) {
     materiasPrimasById,
     receitas,
     receitasById,
+    produtos,
     funcionarios,
     setores,
     atualizarItensReceita,
     adicionarMateriaPrima,
     enviarFichaPdf,
     atualizarDetalhesReceita,
+    excluirReceita,
   } = useStore();
   const [itens, setItens] = useState(() => backfillLinhaId(receita.itens || []));
   const [busca, setBusca] = useState("");
@@ -513,6 +515,26 @@ function ReceitaDetalhe({ receita }) {
     receitasById,
   });
 
+  async function excluir() {
+    const receitasQueUsam = receitas.filter(
+      (r) => r.id !== receita.id && (r.itens || []).some((i) => i.tipo === "receita" && i.materia_prima_id === receita.id)
+    );
+    const produtosQueUsam = produtos.filter((p) => (p.composicao || []).some((c) => c.receita_id === receita.id));
+
+    if (receitasQueUsam.length > 0 || produtosQueUsam.length > 0) {
+      const partes = [];
+      if (receitasQueUsam.length > 0) partes.push(`receita(s): ${receitasQueUsam.map((r) => r.nome).join(", ")}`);
+      if (produtosQueUsam.length > 0) partes.push(`produto(s): ${produtosQueUsam.map((p) => p.nome_produto).join(", ")}`);
+      alert(
+        `Não dá pra excluir — essa receita ainda é usada em ${partes.join(" e ")}. Remova ela de lá primeiro.`
+      );
+      return;
+    }
+
+    if (!confirm(`Excluir a receita "${receita.nome}"? Essa ação não pode ser desfeita.`)) return;
+    await excluirReceita(receita.id);
+  }
+
   return (
     <div className="bg-surface border border-line rounded-lg p-5">
       <div className="flex items-baseline justify-between flex-wrap gap-3">
@@ -543,6 +565,13 @@ function ReceitaDetalhe({ receita }) {
           >
             {gerandoPdf ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
             PDF sem custo
+          </button>
+          <button
+            onClick={excluir}
+            className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line text-brick hover:bg-brick/5"
+          >
+            <Trash2 size={13} />
+            Excluir receita
           </button>
         </div>
       </div>
