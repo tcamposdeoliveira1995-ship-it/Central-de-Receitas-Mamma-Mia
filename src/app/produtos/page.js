@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Search, ChevronRight, Trash2, Save, Check, Loader2, Layers, X } from "lucide-react";
+import { Plus, Search, ChevronRight, Trash2, Save, Check, Loader2, Layers, X, Upload, FileSpreadsheet } from "lucide-react";
+import * as XLSX from "xlsx";
 import { useStore } from "@/lib/store";
 import { custoPorKgReceita, formatBRL } from "@/lib/calc";
 
@@ -13,6 +14,63 @@ function normalizarTexto(texto) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+// Normaliza o CABEÇALHO da planilha só pra CASAR com um dos nomes conhecidos
+// (maiúsculo, sem acento, sem espaço/underscore) — assim "COD_PRODUTO",
+// "Cod Produto" e "codproduto" batem tudo igual, sem depender da grafia
+// exata que o sistema da empresa exportar.
+function normalizarCabecalho(texto) {
+  return (texto || "")
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+// Cada campo do Produto aceita mais de um nome possível de coluna — cobre
+// as variações mais comuns de export de ERP (com/sem underscore, abreviado).
+const ALIASES_COLUNAS = {
+  codigo: ["CODPRODUTO", "CODIGO", "COD"],
+  nome_produto: ["DESCPRODUTO", "DESCRICAOPRODUTO", "DESCRICAO", "DESC"],
+  departamento: ["DEPARTAMENTO", "DEPARTAMENT", "DEPTO"],
+  secao: ["SECAO"],
+  categoria: ["CATEGORIA"],
+  ncm: ["NCM"],
+  codigo_barras: ["CODBARRA", "CODBARRAS", "CODIGOBARRAS", "EAN", "CODIGODEBARRAS"],
+  cest: ["CODCEST", "CEST"],
+};
+
+function mapearLinhaPlanilha(linhaObj) {
+  const porChaveNormalizada = {};
+  Object.keys(linhaObj).forEach((k) => {
+    porChaveNormalizada[normalizarCabecalho(k)] = linhaObj[k];
+  });
+
+  function buscar(aliases) {
+    for (const alias of aliases) {
+      const valor = porChaveNormalizada[alias];
+      if (valor !== undefined && valor !== null && String(valor).trim() !== "") return String(valor).trim();
+    }
+    return "";
+  }
+
+  return {
+    codigo: buscar(ALIASES_COLUNAS.codigo),
+    nome_produto: buscar(ALIASES_COLUNAS.nome_produto),
+    tipo_embalagem: "PCT",
+    codigo_barras: buscar(ALIASES_COLUNAS.codigo_barras),
+    ncm: buscar(ALIASES_COLUNAS.ncm),
+    cest: buscar(ALIASES_COLUNAS.cest),
+    departamento: buscar(ALIASES_COLUNAS.departamento),
+    secao: buscar(ALIASES_COLUNAS.secao),
+    categoria: buscar(ALIASES_COLUNAS.categoria),
+    peso_liquido: "",
+    peso_bruto: "",
+    validade_dias: "",
+    status: "rascunho",
+  };
 }
 
 function produtoVazio() {
@@ -40,6 +98,7 @@ export default function ProdutosPage() {
   const [criando, setCriando] = useState(false);
   const [novo, setNovo] = useState(produtoVazio());
   const [salvandoNovo, setSalvandoNovo] = useState(false);
+  const [importando, setImportando] = useState(false);
 
   const selecionado = produtos.find((p) => p.id === selecionadoId);
 
@@ -86,6 +145,19 @@ export default function ProdutosPage() {
           <Plus size={16} /> Novo produto
         </button>
       </header>
+
+      <div className="mb-4 flex justify-end">
+        <button
+          onClick={() => setImportando((v) => !v)}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-line hover:bg-gold-soft/30"
+        >
+          <FileSpreadsheet size={14} /> Importar planilha
+        </button>
+      </div>
+
+      {importando && (
+        <ImportarProdutosPlanilha produtosExistentes={produtos} onFechar={() => setImportando(false)} onImportado={(id) => setSelecionadoId(id)} />
+      )}
 
       {criando && (
         <div className="bg-surface border border-line rounded-lg p-4 mb-4 flex flex-wrap items-end gap-3">
@@ -426,6 +498,147 @@ function Composicao({ produto }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ImportarProdutosPlanilha({ produtosExistentes, onFechar, onImportado }) {
+  const { criarProduto } = useStore();
+  const [arquivo, setArquivo] = useState(null);
+  const [linhasMapeadas, setLinhasMapeadas] = useState([]);
+  const [erroLeitura, setErroLeitura] = useState("");
+  const [importando, setImportando] = useState(false);
+  const [progresso, setProgresso] = useState(0);
+  const [resultado, setResultado] = useState(null);
+
+  const codigosExistentes = useMemo(() => new Set(produtosExistentes.map((p) => p.codigo)), [produtosExistentes]);
+
+  async function handleArquivo(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setErroLeitura("");
+    setResultado(null);
+    setArquivo(file);
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const primeiraAba = workbook.SheetNames[0];
+      const planilha = workbook.Sheets[primeiraAba];
+      const linhasRaw = XLSX.utils.sheet_to_json(planilha, { defval: "", raw: false });
+      const mapeadas = linhasRaw.map(mapearLinhaPlanilha).filter((l) => l.codigo && l.nome_produto);
+      setLinhasMapeadas(mapeadas);
+    } catch (err) {
+      console.error(err);
+      setErroLeitura("Não consegui ler esse arquivo. Confirma que é um .xlsx ou .csv exportado direto do sistema.");
+      setLinhasMapeadas([]);
+    }
+  }
+
+  const novas = linhasMapeadas.filter((l) => !codigosExistentes.has(l.codigo));
+  const duplicadas = linhasMapeadas.filter((l) => codigosExistentes.has(l.codigo));
+
+  async function importar() {
+    setImportando(true);
+    setProgresso(0);
+    const falhas = [];
+    let ultimoId = null;
+    for (let i = 0; i < novas.length; i++) {
+      try {
+        const criado = await criarProduto(novas[i]);
+        ultimoId = criado.id;
+      } catch (err) {
+        console.error(err);
+        falhas.push(`${novas[i].codigo} — ${novas[i].nome_produto}`);
+      }
+      setProgresso(i + 1);
+    }
+    setImportando(false);
+    setResultado({ criados: novas.length - falhas.length, duplicados: duplicadas.length, falhas });
+    if (ultimoId) onImportado?.(ultimoId);
+  }
+
+  return (
+    <div className="bg-surface border border-line rounded-lg p-4 mb-4">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <p className="text-sm font-medium flex items-center gap-2">
+          <Upload size={15} className="text-gold" /> Importar produtos de uma planilha
+        </p>
+        <button onClick={onFechar} className="text-muted hover:text-brick">
+          <X size={16} />
+        </button>
+      </div>
+      <p className="text-xs text-muted mb-3">
+        Aceita .xlsx ou .csv. Reconhece automaticamente as colunas <span className="font-mono-num">COD_PRODUTO</span>,{" "}
+        <span className="font-mono-num">DESC_PRODUTO</span>/<span className="font-mono-num">DESCRICAO</span>,{" "}
+        <span className="font-mono-num">DEPARTAMENTO</span>, <span className="font-mono-num">SECAO</span>,{" "}
+        <span className="font-mono-num">CATEGORIA</span>, <span className="font-mono-num">NCM</span>,{" "}
+        <span className="font-mono-num">CODBARRA</span> e <span className="font-mono-num">CODCEST</span> — o resto
+        das colunas (estoque, volume, fornecedor...) é ignorado. Cada produto entra como rascunho, pra completar
+        peso e nutricional depois, um por um.
+      </p>
+
+      <input type="file" accept=".xlsx,.xls,.csv" onChange={handleArquivo} disabled={importando} className="text-sm" />
+
+      {erroLeitura && <p className="text-xs text-brick mt-2">{erroLeitura}</p>}
+
+      {arquivo && !erroLeitura && !resultado && (
+        <div className="mt-3">
+          <p className="text-xs text-muted">
+            {linhasMapeadas.length} produto(s) reconhecido(s) no arquivo — {novas.length} novo(s), {duplicadas.length}{" "}
+            já existem (serão ignorados, pra não sobrescrever o que você já editou).
+          </p>
+
+          {novas.length > 0 && (
+            <div className="overflow-x-auto mt-2 border border-line rounded-md max-h-48 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gold-soft/30 sticky top-0">
+                  <tr className="text-left">
+                    <th className="px-2 py-1.5 font-medium">Código</th>
+                    <th className="px-2 py-1.5 font-medium">Nome</th>
+                    <th className="px-2 py-1.5 font-medium">Departamento</th>
+                    <th className="px-2 py-1.5 font-medium">NCM</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {novas.slice(0, 8).map((l, i) => (
+                    <tr key={i} className="border-t border-line">
+                      <td className="px-2 py-1 font-mono-num">{l.codigo}</td>
+                      <td className="px-2 py-1">{l.nome_produto}</td>
+                      <td className="px-2 py-1 text-muted">{l.departamento}</td>
+                      <td className="px-2 py-1 text-muted font-mono-num">{l.ncm}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {novas.length > 8 && <p className="text-[11px] text-muted px-2 py-1">+ {novas.length - 8} outro(s)...</p>}
+            </div>
+          )}
+
+          {importando ? (
+            <p className="text-xs text-sage mt-3 flex items-center gap-1.5">
+              <Loader2 size={12} className="animate-spin" /> Importando {progresso}/{novas.length}...
+            </p>
+          ) : (
+            novas.length > 0 && (
+              <button onClick={importar} className="mt-3 text-sm bg-sage text-white px-4 py-2 rounded-md hover:opacity-90">
+                Importar {novas.length} produto{novas.length === 1 ? "" : "s"}
+              </button>
+            )
+          )}
+        </div>
+      )}
+
+      {resultado && (
+        <div className="mt-3 text-xs">
+          <p className="text-sage">{resultado.criados} produto(s) importado(s) com sucesso.</p>
+          {resultado.duplicados > 0 && (
+            <p className="text-muted mt-1">{resultado.duplicados} ignorado(s) por já existir (código já cadastrado).</p>
+          )}
+          {resultado.falhas.length > 0 && (
+            <p className="text-brick mt-1">Falha em {resultado.falhas.length}: {resultado.falhas.join(", ")}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
