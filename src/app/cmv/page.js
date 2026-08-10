@@ -88,7 +88,6 @@ export default function CMVPage() {
               <th className="px-5 py-3 font-medium">Receita</th>
               <th className="px-5 py-3 font-medium">Tipo</th>
               <th className="px-5 py-3 font-medium text-right">Ingredientes</th>
-              <th className="px-5 py-3 font-medium text-right">Embalagem</th>
               <th className="px-5 py-3 font-medium text-right">Custo total</th>
               <th className="px-5 py-3 font-medium text-right">Produção</th>
               <th className="px-5 py-3 font-medium text-right">CMV unitário</th>
@@ -113,7 +112,6 @@ export default function CMVPage() {
                     )}
                   </td>
                   <td className="px-5 py-3 text-right font-mono-num">{formatBRL(r.cmv.custoIngredientes)}</td>
-                  <td className="px-5 py-3 text-right font-mono-num">{formatBRL(r.cmv.custoEmbalagem)}</td>
                   <td className="px-5 py-3 text-right font-mono-num font-medium">{formatBRL(r.cmv.custoTotal)}</td>
                   <td className="px-5 py-3 text-right font-mono-num text-muted">{r.quantidadeProducao} un</td>
                   <td className="px-5 py-3 text-right font-mono-num text-gold font-semibold">
@@ -132,7 +130,7 @@ export default function CMVPage() {
             })}
             {linhas.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-5 py-8 text-center text-muted text-sm">
+                <td colSpan={8} className="px-5 py-8 text-center text-muted text-sm">
                   {tipoFiltro
                     ? "Nenhuma receita desse tipo ainda."
                     : "Cadastre receitas e ingredientes para ver o CMV."}
