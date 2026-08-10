@@ -5,6 +5,15 @@ import { Save, Check, Loader2 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { calcularCMV, calcularRendimento, pesoTotalIngredientes, formatBRL, formatNumber } from "@/lib/calc";
 
+// Atalhos de padronização de embalagem — clicar já preenche peso unitário
+// (kg) e o nome da unidade de uma vez, pra não digitar toda vez e manter o
+// mesmo padrão em todas as receitas do mesmo tipo.
+const PRESETS_EMBALAGEM = [
+  { label: "Proteína — pacote de 4kg", pesoUnitario: 4, unidadeNome: "pacote de 4kg" },
+  { label: "Molho — pacote de 2kg", pesoUnitario: 2, unidadeNome: "pacote de 2kg" },
+  { label: "Soja — pacote de 2kg", pesoUnitario: 2, unidadeNome: "pacote de 2kg" },
+];
+
 export default function RendimentoPage() {
   const { receitas, materiasPrimasById, receitasById, atualizarRendimentoReceita } = useStore();
   const [receitaId, setReceitaId] = useState(receitas[0]?.id ?? "");
@@ -14,6 +23,7 @@ export default function RendimentoPage() {
     pesoIngredientes: receita?.rendimento?.peso_ingredientes || 0,
     pesoFinal: receita?.rendimento?.peso_final || 0,
     pesoUnitario: receita?.rendimento?.peso_unitario || 0,
+    unidadeNome: receita?.rendimento?.unidade_nome || "un",
   }));
   const [salvando, setSalvando] = useState(false);
   const [salvo, setSalvo] = useState(false);
@@ -25,6 +35,7 @@ export default function RendimentoPage() {
       pesoIngredientes: r?.rendimento?.peso_ingredientes || 0,
       pesoFinal: r?.rendimento?.peso_final || 0,
       pesoUnitario: r?.rendimento?.peso_unitario || 0,
+      unidadeNome: r?.rendimento?.unidade_nome || "un",
     });
     setSalvo(false);
   }
@@ -57,6 +68,16 @@ export default function RendimentoPage() {
     setSalvo(false);
   }
 
+  function setUnidadeNome(value) {
+    setPesos((p) => ({ ...p, unidadeNome: value }));
+    setSalvo(false);
+  }
+
+  function aplicarPreset(preset) {
+    setPesos((p) => ({ ...p, pesoUnitario: preset.pesoUnitario, unidadeNome: preset.unidadeNome }));
+    setSalvo(false);
+  }
+
   async function salvar() {
     if (!receita) return;
     setSalvando(true);
@@ -66,6 +87,7 @@ export default function RendimentoPage() {
         peso_final: pesos.pesoFinal,
         peso_unitario: pesos.pesoUnitario,
         quantidade_produzida: resultado.quantidadeProduzida,
+        unidade_nome: pesos.unidadeNome || "un",
       });
       setSalvo(true);
     } finally {
@@ -99,6 +121,27 @@ export default function RendimentoPage() {
 
       {receita && (
         <>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <span className="text-xs uppercase tracking-wide text-muted mr-1">Padronizar embalagem:</span>
+            {PRESETS_EMBALAGEM.map((preset) => {
+              const ativo = pesos.pesoUnitario === preset.pesoUnitario && pesos.unidadeNome === preset.unidadeNome;
+              return (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => aplicarPreset(preset)}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                    ativo
+                      ? "border-sage bg-sage-soft text-sage"
+                      : "border-line text-muted hover:bg-gold-soft/30"
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="bg-surface border border-line rounded-lg p-5">
               <h2 className="font-display text-lg mb-4">Entrada — pesos (kg)</h2>
@@ -128,6 +171,19 @@ export default function RendimentoPage() {
                   Peça pesada de verdade depois de assar/fritar/processar — o sistema não calcula isso sozinho.
                 </p>
                 <Campo label="Peso unitário (por unidade)" value={pesos.pesoUnitario} onChange={(v) => set("pesoUnitario", v)} step="0.001" />
+                <label className="text-xs text-muted block">
+                  Nome da unidade produzida
+                  <input
+                    type="text"
+                    value={pesos.unidadeNome}
+                    onChange={(e) => setUnidadeNome(e.target.value)}
+                    placeholder="Ex: un, pacote de 4kg, pacote de 2kg"
+                    className="mt-1 w-full px-3 py-2 rounded-md border border-line text-sm"
+                  />
+                </label>
+                <p className="text-xs text-muted -mt-1.5">
+                  Só rótulo de exibição (aparece em vez de "un" nas telas de Receitas e CMV) — não muda o cálculo.
+                </p>
               </div>
             </div>
 
@@ -137,9 +193,17 @@ export default function RendimentoPage() {
                 <Resultado label="Rendimento" value={`${formatNumber(resultado.rendimentoPercentual, 1)}%`} tone="sage" />
                 <Resultado label="Perda" value={`${formatNumber(resultado.perdaKg, 2)} kg`} tone="brick" />
                 <Resultado label="Perda %" value={`${formatNumber(resultado.perdaPercentual, 1)}%`} tone="brick" />
-                <Resultado label="Qtde produzida" value={formatNumber(resultado.quantidadeProduzida, 0)} tone="gold" />
+                <Resultado
+                  label="Qtde produzida"
+                  value={`${formatNumber(resultado.quantidadeProduzida, 0)} ${pesos.unidadeNome || "un"}`}
+                  tone="gold"
+                />
                 <Resultado label="CMV por kg" value={formatBRL(resultado.cmvPorKg)} />
-                <Resultado label="CMV unitário" value={formatBRL(resultado.cmvUnitario)} tone="gold" />
+                <Resultado
+                  label={`CMV por ${pesos.unidadeNome || "un"}`}
+                  value={formatBRL(resultado.cmvUnitario)}
+                  tone="gold"
+                />
               </div>
             </div>
           </div>
