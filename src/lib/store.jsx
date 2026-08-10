@@ -29,6 +29,7 @@ export function StoreProvider({ children }) {
   const [funcionarios, setFuncionarios] = useState(isDemoMode ? (seed.funcionarios || []) : []);
   const [materiasPrimas, setMateriasPrimas] = useState(isDemoMode ? seed.materiasPrimas : []);
   const [receitas, setReceitas] = useState(isDemoMode ? seed.receitas : []);
+  const [produtos, setProdutos] = useState(isDemoMode ? (seed.produtos || []) : []);
   const [producoes, setProducoes] = useState(isDemoMode ? seed.producoes : []);
   const [coccoes, setCoccoes] = useState(isDemoMode ? (seed.coccoes || []) : []);
   const [recheiosFrios, setRecheiosFrios] = useState(isDemoMode ? (seed.recheiosFrios || []) : []);
@@ -64,6 +65,7 @@ export function StoreProvider({ children }) {
       if (dados.funcionarios) setFuncionarios(dados.funcionarios);
       if (dados.materiasPrimas) setMateriasPrimas(dados.materiasPrimas);
       if (dados.receitas) setReceitas(dados.receitas);
+      if (dados.produtos) setProdutos(dados.produtos);
       if (dados.producoes) setProducoes(dados.producoes);
       if (dados.coccoes) setCoccoes(dados.coccoes);
       if (dados.recheiosFrios) setRecheiosFrios(dados.recheiosFrios);
@@ -483,6 +485,73 @@ export function StoreProvider({ children }) {
     []
   );
 
+  // ── MÓDULO PRODUTOS (composição a partir de receitas) ──────────────
+  // Diferente de adicionarProduto/atualizarProduto/excluirProduto acima
+  // (que dependem de uma receita_id fixa, usados na tela de Receitas), estes
+  // operam sobre a lista `produtos` no nível raiz — o Produto aqui não
+  // pertence a nenhuma receita específica; ele é composto por uma ou mais
+  // receitas (ver atualizarComposicaoProduto), na tela própria de Produtos.
+  const criarProduto = useCallback(async (dados) => {
+    if (!isDemoMode) {
+      const criado = await postAction("addProduto", { receita_id: "", ...dados });
+      setProdutos((prev) => [...prev, { ...criado, composicao: [] }]);
+      return criado;
+    }
+    const criado = {
+      id: `prod-${Date.now()}`,
+      receita_id: "",
+      composicao: [],
+      info_nutricional: null,
+      tabela_nutricional: [],
+      mod: { itens: [], custo_total: 0 },
+      ...dados,
+    };
+    setProdutos((prev) => [...prev, criado]);
+    return criado;
+  }, []);
+
+  const atualizarDadosProduto = useCallback(
+    async (produtoId, dados) => {
+      setProdutos((prev) => prev.map((p) => (p.id === produtoId ? { ...p, ...dados } : p)));
+      if (!isDemoMode) {
+        await enfileirar(`produtoPadrao:${produtoId}`, () =>
+          postAction("updateProduto", { id: produtoId, receita_id: "", ...dados })
+        );
+      }
+    },
+    [enfileirar]
+  );
+
+  const removerProduto = useCallback(async (produtoId) => {
+    setProdutos((prev) => prev.filter((p) => p.id !== produtoId));
+    if (!isDemoMode) {
+      await postAction("deleteProduto", { id: produtoId });
+    }
+  }, []);
+
+  // Substitui a composição inteira de um produto — itens: [{ receita_id,
+  // quantidade (kg), observacao }]. O CMV do produto é derivado disso no
+  // próprio componente da tela (soma de quantidade × custo por kg de cada
+  // receita), não fica guardado aqui.
+  const atualizarComposicaoProduto = useCallback(
+    async (produtoId, itens) => {
+      setProdutos((prev) => prev.map((p) => (p.id === produtoId ? { ...p, composicao: itens } : p)));
+      if (!isDemoMode) {
+        await enfileirar(`composicaoProduto:${produtoId}`, () =>
+          postAction("updateComposicaoProduto", {
+            produto_id: produtoId,
+            itens: (itens || []).map((i) => ({
+              receita_id: i.receita_id,
+              quantidade: i.quantidade || 0,
+              observacao: i.observacao || "",
+            })),
+          })
+        );
+      }
+    },
+    [enfileirar]
+  );
+
   // ── MOD/HHT ESTIMADA DO PRODUTO/SKU ────────────────────────────────
   // Cada Produto tem sua própria lista de MOD (Setor + Função + Pessoas +
   // Tempo) — diferente da Receita, porque produtos da mesma receita podem
@@ -710,6 +779,7 @@ export function StoreProvider({ children }) {
     materiasPrimasById,
     receitas,
     receitasById,
+    produtos,
     producoes,
     coccoes,
     recheiosFrios,
@@ -741,6 +811,10 @@ export function StoreProvider({ children }) {
     adicionarFuncionario,
     atualizarFuncionario,
     excluirFuncionario,
+    criarProduto,
+    atualizarDadosProduto,
+    removerProduto,
+    atualizarComposicaoProduto,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
