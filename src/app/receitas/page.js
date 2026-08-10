@@ -503,6 +503,7 @@ function ReceitaDetalhe({ receita }) {
   }
 
   const quantidadeProducao = receita.rendimento?.quantidade_produzida || 1;
+  const unidadeProducao = receita.rendimento?.unidade_nome || "un";
   const cmv = calcularCMV({
     itens,
     embalagemCusto: receita.embalagem_custo || 0,
@@ -906,7 +907,7 @@ function ReceitaDetalhe({ receita }) {
       <div className="mt-3 flex items-baseline gap-2">
         <span className="text-xs uppercase tracking-wide text-muted">CMV unitário</span>
         <span className="font-display text-xl font-mono-num text-sage">{formatBRL(cmv.cmvUnitario)}</span>
-        <span className="text-xs text-muted">(produção prevista: {formatNumber(quantidadeProducao, 0)} un)</span>
+        <span className="text-xs text-muted">(produção prevista: {formatNumber(quantidadeProducao, 0)} {unidadeProducao})</span>
         <span className="text-xs text-muted ml-2">
           A mão de obra (MOD) agora é definida por Produto/SKU, logo abaixo em "Produtos / Códigos (SKUs)".
         </span>
