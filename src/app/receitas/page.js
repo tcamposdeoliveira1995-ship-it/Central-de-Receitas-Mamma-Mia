@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Plus, Search, X, ChevronRight, ChevronDown, ChevronUp, Upload, FileText, Check, Loader2, Layers, Download, Flame, Package, Trash2, ClipboardList, PiggyBank, Copy } from "lucide-react";
 import { calcularAlertasRotulagem } from "@/lib/rotulagemFrontal";
 import { pdf } from "@react-pdf/renderer";
@@ -572,14 +573,11 @@ function ReceitaDetalhe({ receita }) {
 
       <NutricionalReceita receita={receita} />
 
-      <ProdutosSKU
-        receitaId={receita.id}
-        produtos={receita.produtos}
-        cmvUnitario={cmv.cmvUnitario}
-        quantidadeProducao={quantidadeProducao}
-        funcionarios={funcionarios}
-        setores={setores}
-      />
+      <p className="mt-4 text-xs text-muted">
+        Produtos/SKUs vinculados a essa receita agora ficam no módulo{" "}
+        <Link href="/produtos" className="text-sage hover:underline">Produtos</Link>, que também permite
+        combinar mais de uma receita (ex: massa + recheio) num mesmo produto final.
+      </p>
 
       {/* Upload de ficha técnica em PDF */}
       <div className="mt-5 border border-dashed border-line rounded-lg p-4">
