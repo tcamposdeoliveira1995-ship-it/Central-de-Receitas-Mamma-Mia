@@ -25,6 +25,16 @@ function backfillLinhaId(itens) {
   return itens.map((item) => (item.linha_id ? item : { ...item, linha_id: gerarLinhaId() }));
 }
 
+// Ignora acento/maiúscula pra busca por nome/código não depender de digitar
+// exatamente igual (ex: "acem" acha "Acém").
+function normalizarTexto(texto) {
+  return (texto || "")
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 export default function ReceitasPage() {
   const { receitas, adicionarReceita } = useStore();
   const [selecionadaId, setSelecionadaId] = useState(receitas[0]?.id ?? null);
@@ -32,18 +42,25 @@ export default function ReceitasPage() {
   const [nomeNova, setNomeNova] = useState("");
   const [empresaNova, setEmpresaNova] = useState("YUKA Alimentos");
   const [tipoFiltro, setTipoFiltro] = useState(""); // "" = todos os tipos
+  const [buscaReceita, setBuscaReceita] = useState("");
 
   const selecionada = receitas.find((r) => r.id === selecionadaId);
 
   // Listagem principal sempre em ordem alfabética pelo nome da receita,
-  // e filtrada pelo tipo escolhido nos cards (Massa/Recheio Frio/.../Outro).
-  const receitasOrdenadas = useMemo(
-    () =>
-      [...receitas]
-        .filter((r) => !tipoFiltro || r.papel === tipoFiltro)
-        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" })),
-    [receitas, tipoFiltro]
-  );
+  // filtrada pelo tipo escolhido nos cards (Massa/Recheio Frio/.../Outro)
+  // e pela busca por nome ou código.
+  const receitasOrdenadas = useMemo(() => {
+    const buscaNormalizada = normalizarTexto(buscaReceita);
+    return [...receitas]
+      .filter((r) => !tipoFiltro || r.papel === tipoFiltro)
+      .filter(
+        (r) =>
+          !buscaNormalizada ||
+          normalizarTexto(r.nome).includes(buscaNormalizada) ||
+          normalizarTexto(r.codigo).includes(buscaNormalizada)
+      )
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }));
+  }, [receitas, tipoFiltro, buscaReceita]);
 
   async function criarReceita() {
     if (!nomeNova.trim()) return;
@@ -132,6 +149,16 @@ export default function ReceitasPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="bg-surface border border-line rounded-lg overflow-hidden">
+          <div className="p-3 border-b border-line relative">
+            <Search size={14} className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" />
+            <input
+              type="text"
+              value={buscaReceita}
+              onChange={(e) => setBuscaReceita(e.target.value)}
+              placeholder="Buscar por nome ou código..."
+              className="w-full pl-8 pr-3 py-1.5 rounded-md border border-line text-sm bg-surface focus:outline-none focus:ring-1 focus:ring-gold"
+            />
+          </div>
           <ul>
             {receitasOrdenadas.map((r) => (
               <li key={r.id}>
@@ -151,7 +178,11 @@ export default function ReceitasPage() {
             ))}
             {receitasOrdenadas.length === 0 && (
               <li className="px-4 py-8 text-center text-sm text-muted">
-                {tipoFiltro ? "Nenhuma receita desse tipo ainda." : "Nenhuma receita cadastrada."}
+                {buscaReceita
+                  ? "Nenhuma receita encontrada com essa busca."
+                  : tipoFiltro
+                  ? "Nenhuma receita desse tipo ainda."
+                  : "Nenhuma receita cadastrada."}
               </li>
             )}
           </ul>
