@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, X, ChevronRight, ChevronDown, ChevronUp, Upload, FileText, Check, Loader2, Layers, Download, Flame, Package, Trash2, ClipboardList, PiggyBank, Copy } from "lucide-react";
+import { Plus, Search, X, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Upload, FileText, Check, Loader2, Layers, Download, Flame, Package, Trash2, ClipboardList, PiggyBank, Copy } from "lucide-react";
 import { calcularAlertasRotulagem } from "@/lib/rotulagemFrontal";
 import { pdf } from "@react-pdf/renderer";
 import { useStore } from "@/lib/store";
@@ -44,6 +44,7 @@ export default function ReceitasPage() {
   const [empresaNova, setEmpresaNova] = useState("YUKA Alimentos");
   const [tipoFiltro, setTipoFiltro] = useState(""); // "" = todos os tipos
   const [buscaReceita, setBuscaReceita] = useState("");
+  const [listaRecolhida, setListaRecolhida] = useState(false);
 
   const selecionada = receitas.find((r) => r.id === selecionadaId);
 
@@ -62,6 +63,20 @@ export default function ReceitasPage() {
       )
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }));
   }, [receitas, tipoFiltro, buscaReceita]);
+
+  const indiceAtual = receitasOrdenadas.findIndex((r) => r.id === selecionadaId);
+  const temAnterior = indiceAtual > 0;
+  const temProximo = indiceAtual !== -1 && indiceAtual < receitasOrdenadas.length - 1;
+
+  function irParaAnterior() {
+    if (!temAnterior) return;
+    setSelecionadaId(receitasOrdenadas[indiceAtual - 1].id);
+  }
+
+  function irParaProximo() {
+    if (!temProximo) return;
+    setSelecionadaId(receitasOrdenadas[indiceAtual + 1].id);
+  }
 
   async function criarReceita() {
     if (!nomeNova.trim()) return;
@@ -148,50 +163,80 @@ export default function ReceitasPage() {
         })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="bg-surface border border-line rounded-lg overflow-hidden">
-          <div className="p-3 border-b border-line relative">
-            <Search size={14} className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" />
-            <input
-              type="text"
-              value={buscaReceita}
-              onChange={(e) => setBuscaReceita(e.target.value)}
-              placeholder="Buscar por nome ou código..."
-              className="w-full pl-8 pr-3 py-1.5 rounded-md border border-line text-sm bg-surface focus:outline-none focus:ring-1 focus:ring-gold"
-            />
+      <div className={`grid grid-cols-1 gap-4 ${listaRecolhida ? "lg:grid-cols-[3rem_1fr]" : "lg:grid-cols-3"}`}>
+        {listaRecolhida ? (
+          <button
+            onClick={() => setListaRecolhida(false)}
+            title="Mostrar listagem de receitas"
+            className="hidden lg:flex flex-col items-center justify-center gap-2 bg-surface border border-line rounded-lg py-4 text-muted hover:text-ink hover:bg-gold-soft/30"
+          >
+            <ChevronsRight size={16} />
+            <span className="text-[10px] uppercase tracking-wide [writing-mode:vertical-rl]">
+              Receitas ({receitasOrdenadas.length})
+            </span>
+          </button>
+        ) : (
+          <div className="bg-surface border border-line rounded-lg overflow-hidden">
+            <div className="p-3 border-b border-line flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
+                <input
+                  type="text"
+                  value={buscaReceita}
+                  onChange={(e) => setBuscaReceita(e.target.value)}
+                  placeholder="Buscar por nome ou código..."
+                  className="w-full pl-8 pr-3 py-1.5 rounded-md border border-line text-sm bg-surface focus:outline-none focus:ring-1 focus:ring-gold"
+                />
+              </div>
+              <button
+                onClick={() => setListaRecolhida(true)}
+                title="Recolher listagem"
+                className="hidden lg:flex p-2 rounded-md border border-line text-muted hover:text-ink hover:bg-gold-soft/30 shrink-0"
+              >
+                <ChevronsLeft size={14} />
+              </button>
+            </div>
+            <ul>
+              {receitasOrdenadas.map((r) => (
+                <li key={r.id}>
+                  <button
+                    onClick={() => setSelecionadaId(r.id)}
+                    className={`w-full flex items-center justify-between px-4 py-3 text-sm text-left border-b border-line last:border-0 hover:bg-gold-soft/30 ${
+                      selecionadaId === r.id ? "bg-gold-soft/50" : ""
+                    }`}
+                  >
+                    <div>
+                      <p className="font-medium">{r.nome}</p>
+                      <p className="text-xs text-muted font-mono-num">{r.codigo} · v{r.versao_atual || 1}</p>
+                    </div>
+                    <ChevronRight size={14} className="text-muted" />
+                  </button>
+                </li>
+              ))}
+              {receitasOrdenadas.length === 0 && (
+                <li className="px-4 py-8 text-center text-sm text-muted">
+                  {buscaReceita
+                    ? "Nenhuma receita encontrada com essa busca."
+                    : tipoFiltro
+                    ? "Nenhuma receita desse tipo ainda."
+                    : "Nenhuma receita cadastrada."}
+                </li>
+              )}
+            </ul>
           </div>
-          <ul>
-            {receitasOrdenadas.map((r) => (
-              <li key={r.id}>
-                <button
-                  onClick={() => setSelecionadaId(r.id)}
-                  className={`w-full flex items-center justify-between px-4 py-3 text-sm text-left border-b border-line last:border-0 hover:bg-gold-soft/30 ${
-                    selecionadaId === r.id ? "bg-gold-soft/50" : ""
-                  }`}
-                >
-                  <div>
-                    <p className="font-medium">{r.nome}</p>
-                    <p className="text-xs text-muted font-mono-num">{r.codigo} · v{r.versao_atual || 1}</p>
-                  </div>
-                  <ChevronRight size={14} className="text-muted" />
-                </button>
-              </li>
-            ))}
-            {receitasOrdenadas.length === 0 && (
-              <li className="px-4 py-8 text-center text-sm text-muted">
-                {buscaReceita
-                  ? "Nenhuma receita encontrada com essa busca."
-                  : tipoFiltro
-                  ? "Nenhuma receita desse tipo ainda."
-                  : "Nenhuma receita cadastrada."}
-              </li>
-            )}
-          </ul>
-        </div>
+        )}
 
-        <div className="lg:col-span-2">
+        <div className={listaRecolhida ? "" : "lg:col-span-2"}>
           {selecionada ? (
-            <ReceitaDetalhe receita={selecionada} />
+            <ReceitaDetalhe
+              receita={selecionada}
+              onAnterior={irParaAnterior}
+              onProximo={irParaProximo}
+              temAnterior={temAnterior}
+              temProximo={temProximo}
+              posicaoAtual={indiceAtual + 1}
+              totalReceitas={receitasOrdenadas.length}
+            />
           ) : (
             <div className="bg-surface border border-line rounded-lg p-8 text-center text-sm text-muted">
               Selecione ou crie uma receita.
@@ -203,7 +248,7 @@ export default function ReceitasPage() {
   );
 }
 
-function ReceitaDetalhe({ receita }) {
+function ReceitaDetalhe({ receita, onAnterior, onProximo, temAnterior, temProximo, posicaoAtual, totalReceitas }) {
   const {
     materiasPrimas,
     materiasPrimasById,
@@ -536,7 +581,32 @@ function ReceitaDetalhe({ receita }) {
   }
 
   return (
-    <div className="bg-surface border border-line rounded-lg p-5">
+    <div className="space-y-4">
+      {typeof totalReceitas === "number" && totalReceitas > 0 && (
+        <div className="flex items-center justify-between gap-3 bg-surface border border-line rounded-lg px-3 py-2">
+          <button
+            onClick={onAnterior}
+            disabled={!temAnterior}
+            title="Receita anterior"
+            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border border-line text-muted hover:text-ink hover:bg-gold-soft/30 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          >
+            <ChevronLeft size={14} /> Anterior
+          </button>
+          <span className="text-xs text-muted font-mono-num whitespace-nowrap">
+            {posicaoAtual} de {totalReceitas}
+          </span>
+          <button
+            onClick={onProximo}
+            disabled={!temProximo}
+            title="Próxima receita"
+            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border border-line text-muted hover:text-ink hover:bg-gold-soft/30 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          >
+            Próximo <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
+
+      <div className="bg-surface border border-line rounded-lg p-5">
       <div className="flex items-baseline justify-between flex-wrap gap-3">
         <div>
           <p className="text-xs font-mono-num text-muted">{receita.codigo}</p>
@@ -938,6 +1008,7 @@ function ReceitaDetalhe({ receita }) {
         <span className="text-xs text-muted ml-2">
           A mão de obra (MOD) agora é definida por Produto/SKU, logo abaixo em "Produtos / Códigos (SKUs)".
         </span>
+      </div>
       </div>
     </div>
   );
