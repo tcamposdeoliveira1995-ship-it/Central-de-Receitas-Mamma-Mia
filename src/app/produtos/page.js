@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Search, ChevronRight, Trash2, Save, Check, Loader2, Layers, X, Upload, FileSpreadsheet } from "lucide-react";
+import { Plus, Search, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Trash2, Save, Check, Loader2, Layers, X, Upload, FileSpreadsheet } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useStore } from "@/lib/store";
 import { custoPorKgReceita, formatBRL } from "@/lib/calc";
@@ -99,6 +99,7 @@ export default function ProdutosPage() {
   const [novo, setNovo] = useState(produtoVazio());
   const [salvandoNovo, setSalvandoNovo] = useState(false);
   const [importando, setImportando] = useState(false);
+  const [listaRecolhida, setListaRecolhida] = useState(false);
 
   const selecionado = produtos.find((p) => p.id === selecionadoId);
 
@@ -113,6 +114,20 @@ export default function ProdutosPage() {
       )
       .sort((a, b) => (a.nome_produto || "").localeCompare(b.nome_produto || "", "pt-BR", { sensitivity: "base" }));
   }, [produtos, busca]);
+
+  const indiceAtual = produtosFiltrados.findIndex((p) => p.id === selecionadoId);
+  const temAnterior = indiceAtual > 0;
+  const temProximo = indiceAtual !== -1 && indiceAtual < produtosFiltrados.length - 1;
+
+  function irParaAnterior() {
+    if (!temAnterior) return;
+    setSelecionadoId(produtosFiltrados[indiceAtual - 1].id);
+  }
+
+  function irParaProximo() {
+    if (!temProximo) return;
+    setSelecionadoId(produtosFiltrados[indiceAtual + 1].id);
+  }
 
   async function salvarNovoProduto() {
     if (!novo.codigo.trim() || !novo.nome_produto.trim()) return;
@@ -201,46 +216,76 @@ export default function ProdutosPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="bg-surface border border-line rounded-lg overflow-hidden">
-          <div className="p-3 border-b border-line relative">
-            <Search size={14} className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" />
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por nome ou código..."
-              className="w-full pl-8 pr-3 py-1.5 rounded-md border border-line text-sm bg-surface focus:outline-none focus:ring-1 focus:ring-gold"
-            />
+      <div className={`grid grid-cols-1 gap-4 ${listaRecolhida ? "lg:grid-cols-[3rem_1fr]" : "lg:grid-cols-3"}`}>
+        {listaRecolhida ? (
+          <button
+            onClick={() => setListaRecolhida(false)}
+            title="Mostrar listagem de produtos"
+            className="hidden lg:flex flex-col items-center justify-center gap-2 bg-surface border border-line rounded-lg py-4 text-muted hover:text-ink hover:bg-gold-soft/30"
+          >
+            <ChevronsRight size={16} />
+            <span className="text-[10px] uppercase tracking-wide [writing-mode:vertical-rl]">
+              Produtos ({produtosFiltrados.length})
+            </span>
+          </button>
+        ) : (
+          <div className="bg-surface border border-line rounded-lg overflow-hidden">
+            <div className="p-3 border-b border-line flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
+                <input
+                  type="text"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar por nome ou código..."
+                  className="w-full pl-8 pr-3 py-1.5 rounded-md border border-line text-sm bg-surface focus:outline-none focus:ring-1 focus:ring-gold"
+                />
+              </div>
+              <button
+                onClick={() => setListaRecolhida(true)}
+                title="Recolher listagem"
+                className="hidden lg:flex p-2 rounded-md border border-line text-muted hover:text-ink hover:bg-gold-soft/30 shrink-0"
+              >
+                <ChevronsLeft size={14} />
+              </button>
+            </div>
+            <ul>
+              {produtosFiltrados.map((p) => (
+                <li key={p.id}>
+                  <button
+                    onClick={() => setSelecionadoId(p.id)}
+                    className={`w-full flex items-center justify-between px-4 py-3 text-sm text-left border-b border-line last:border-0 hover:bg-gold-soft/30 ${
+                      selecionadoId === p.id ? "bg-gold-soft/50" : ""
+                    }`}
+                  >
+                    <div>
+                      <p className="font-medium">{p.nome_produto || "(sem nome)"}</p>
+                      <p className="text-xs text-muted font-mono-num">{p.codigo}</p>
+                    </div>
+                    <ChevronRight size={14} className="text-muted" />
+                  </button>
+                </li>
+              ))}
+              {produtosFiltrados.length === 0 && (
+                <li className="px-4 py-8 text-center text-sm text-muted">
+                  {busca ? "Nenhum produto encontrado com essa busca." : "Nenhum produto cadastrado ainda."}
+                </li>
+              )}
+            </ul>
           </div>
-          <ul>
-            {produtosFiltrados.map((p) => (
-              <li key={p.id}>
-                <button
-                  onClick={() => setSelecionadoId(p.id)}
-                  className={`w-full flex items-center justify-between px-4 py-3 text-sm text-left border-b border-line last:border-0 hover:bg-gold-soft/30 ${
-                    selecionadoId === p.id ? "bg-gold-soft/50" : ""
-                  }`}
-                >
-                  <div>
-                    <p className="font-medium">{p.nome_produto || "(sem nome)"}</p>
-                    <p className="text-xs text-muted font-mono-num">{p.codigo}</p>
-                  </div>
-                  <ChevronRight size={14} className="text-muted" />
-                </button>
-              </li>
-            ))}
-            {produtosFiltrados.length === 0 && (
-              <li className="px-4 py-8 text-center text-sm text-muted">
-                {busca ? "Nenhum produto encontrado com essa busca." : "Nenhum produto cadastrado ainda."}
-              </li>
-            )}
-          </ul>
-        </div>
+        )}
 
-        <div className="lg:col-span-2">
+        <div className={listaRecolhida ? "" : "lg:col-span-2"}>
           {selecionado ? (
-            <ProdutoDetalhe produto={selecionado} />
+            <ProdutoDetalhe
+              produto={selecionado}
+              onAnterior={irParaAnterior}
+              onProximo={irParaProximo}
+              temAnterior={temAnterior}
+              temProximo={temProximo}
+              posicaoAtual={indiceAtual + 1}
+              totalProdutos={produtosFiltrados.length}
+            />
           ) : (
             <div className="bg-surface border border-line rounded-lg p-8 text-center text-sm text-muted">
               Selecione ou crie um produto.
@@ -252,7 +297,7 @@ export default function ProdutosPage() {
   );
 }
 
-function ProdutoDetalhe({ produto }) {
+function ProdutoDetalhe({ produto, onAnterior, onProximo, temAnterior, temProximo, posicaoAtual, totalProdutos }) {
   const { atualizarDadosProduto, removerProduto } = useStore();
   const [campos, setCampos] = useState(() => ({ ...produtoVazio(), ...produto }));
   const [salvandoDados, setSalvandoDados] = useState(false);
@@ -290,6 +335,30 @@ function ProdutoDetalhe({ produto }) {
 
   return (
     <div className="space-y-4">
+      {typeof totalProdutos === "number" && totalProdutos > 0 && (
+        <div className="flex items-center justify-between gap-3 bg-surface border border-line rounded-lg px-3 py-2">
+          <button
+            onClick={onAnterior}
+            disabled={!temAnterior}
+            title="Produto anterior"
+            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border border-line text-muted hover:text-ink hover:bg-gold-soft/30 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          >
+            <ChevronLeft size={14} /> Anterior
+          </button>
+          <span className="text-xs text-muted font-mono-num whitespace-nowrap">
+            {posicaoAtual} de {totalProdutos}
+          </span>
+          <button
+            onClick={onProximo}
+            disabled={!temProximo}
+            title="Próximo produto"
+            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border border-line text-muted hover:text-ink hover:bg-gold-soft/30 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          >
+            Próximo <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
+
       <div className="bg-surface border border-line rounded-lg p-5">
         <div className="flex items-baseline justify-between flex-wrap gap-3">
           <div>
