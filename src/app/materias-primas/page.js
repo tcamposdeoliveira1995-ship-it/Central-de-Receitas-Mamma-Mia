@@ -1,27 +1,55 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Search, Plus, TrendingUp, TrendingDown, ChevronDown, ChevronRight as ChevronRightIcon, Flame, ClipboardList, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { formatBRL, formatNumber } from "@/lib/calc";
+import { tacoDatabase, tabelaNutricionalDoItemTaco } from "@/lib/tacoDatabase";
 
 export default function MateriasPrimasPage() {
   const { materiasPrimas, categorias, fornecedores, atualizarPrecoMateriaPrima, adicionarMateriaPrima } = useStore();
   const [busca, setBusca] = useState("");
+  const [categoriaFiltro, setCategoriaFiltro] = useState("");
   const [selecionada, setSelecionada] = useState(null);
   const [novoPreco, setNovoPreco] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
 
-  const filtradas = useMemo(
-    () =>
-      materiasPrimas.filter((mp) =>
-        [mp.nome, mp.codigo].join(" ").toLowerCase().includes(busca.toLowerCase())
-      ),
-    [materiasPrimas, busca]
-  );
-
   const categoriaNome = (id) => categorias.find((c) => c.id === id)?.nome || "—";
   const fornecedorNome = (id) => fornecedores.find((f) => f.id === id)?.nome || "—";
+
+  const filtradas = useMemo(
+    () =>
+      materiasPrimas
+        .filter((mp) =>
+          [mp.nome, mp.codigo].join(" ").toLowerCase().includes(busca.toLowerCase())
+        )
+        .filter((mp) => !categoriaFiltro || mp.categoria_id === categoriaFiltro)
+        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+    [materiasPrimas, busca, categoriaFiltro]
+  );
+
+  // Categorias que de fato têm matéria-prima cadastrada, em ordem alfabética —
+  // usadas tanto nos chips de filtro quanto para agrupar a tabela.
+  const categoriasComMp = useMemo(() => {
+    const idsUsados = new Set(materiasPrimas.map((mp) => mp.categoria_id));
+    return categorias
+      .filter((c) => idsUsados.has(c.id))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  }, [materiasPrimas, categorias]);
+
+  // Agrupa a lista já filtrada/ordenada por categoria, na mesma ordem
+  // alfabética de categoriasComMp, pra exibir com cabeçalho de grupo.
+  const grupos = useMemo(() => {
+    const porCategoria = new Map();
+    filtradas.forEach((mp) => {
+      const lista = porCategoria.get(mp.categoria_id) || [];
+      lista.push(mp);
+      porCategoria.set(mp.categoria_id, lista);
+    });
+    return categoriasComMp
+      .filter((c) => porCategoria.has(c.id))
+      .map((c) => ({ categoria: c, itens: porCategoria.get(c.id) }));
+  }, [filtradas, categoriasComMp]);
 
   async function salvarPreco(mp) {
     const valor = parseFloat(novoPreco.replace(",", "."));
@@ -58,7 +86,7 @@ export default function MateriasPrimasPage() {
         />
       )}
 
-      <div className="relative mb-4">
+      <div className="relative mb-3">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
         <input
           value={busca}
@@ -66,6 +94,28 @@ export default function MateriasPrimasPage() {
           placeholder="Buscar por nome ou código..."
           className="w-full pl-9 pr-3 py-2.5 rounded-md border border-line bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-gold/40"
         />
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        <button
+          onClick={() => setCategoriaFiltro("")}
+          className={`text-xs px-3 py-1.5 rounded-full border ${
+            categoriaFiltro === "" ? "bg-sage text-white border-sage" : "border-line text-muted hover:bg-gold-soft/30"
+          }`}
+        >
+          Todas
+        </button>
+        {categoriasComMp.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => setCategoriaFiltro((prev) => (prev === c.id ? "" : c.id))}
+            className={`text-xs px-3 py-1.5 rounded-full border ${
+              categoriaFiltro === c.id ? "bg-sage text-white border-sage" : "border-line text-muted hover:bg-gold-soft/30"
+            }`}
+          >
+            {c.nome}
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -82,20 +132,30 @@ export default function MateriasPrimasPage() {
               </tr>
             </thead>
             <tbody>
-              {filtradas.map((mp) => (
-                <tr
-                  key={mp.id}
-                  onClick={() => setSelecionada(mp)}
-                  className={`border-b border-line last:border-0 cursor-pointer hover:bg-gold-soft/30 ${
-                    selecionada?.id === mp.id ? "bg-gold-soft/50" : ""
-                  }`}
-                >
-                  <td className="px-4 py-3 font-mono-num text-muted">{mp.codigo}</td>
-                  <td className="px-4 py-3">{mp.nome}</td>
-                  <td className="px-4 py-3 text-muted">{categoriaNome(mp.categoria_id)}</td>
-                  <td className="px-4 py-3 text-muted">{mp.unidade}</td>
-                  <td className="px-4 py-3 text-right font-mono-num font-medium">{formatBRL(mp.preco_atual)}</td>
-                </tr>
+              {grupos.map((grupo) => (
+                <React.Fragment key={grupo.categoria.id}>
+                  <tr>
+                    <td colSpan={5} className="px-4 pt-4 pb-1.5 text-xs uppercase tracking-wide text-gold font-medium bg-gold-soft/20">
+                      {grupo.categoria.nome}
+                      <span className="text-muted normal-case tracking-normal font-normal"> · {grupo.itens.length}</span>
+                    </td>
+                  </tr>
+                  {grupo.itens.map((mp) => (
+                    <tr
+                      key={mp.id}
+                      onClick={() => setSelecionada(mp)}
+                      className={`border-b border-line last:border-0 cursor-pointer hover:bg-gold-soft/30 ${
+                        selecionada?.id === mp.id ? "bg-gold-soft/50" : ""
+                      }`}
+                    >
+                      <td className="px-4 py-3 font-mono-num text-muted">{mp.codigo}</td>
+                      <td className="px-4 py-3">{mp.nome}</td>
+                      <td className="px-4 py-3 text-muted">{categoriaNome(mp.categoria_id)}</td>
+                      <td className="px-4 py-3 text-muted">{mp.unidade}</td>
+                      <td className="px-4 py-3 text-right font-mono-num font-medium">{formatBRL(mp.preco_atual)}</td>
+                    </tr>
+                  ))}
+                </React.Fragment>
               ))}
               {filtradas.length === 0 && (
                 <tr>
@@ -514,6 +574,12 @@ function NutricionalMateriaPrima({ mp, fornecedores }) {
   const [tabela, setTabela] = useState(() =>
     mp.tabela_nutricional?.length ? mp.tabela_nutricional : linhasNutricionaisPadraoMP()
   );
+  // Fonte da nutricional: "manual" (rótulo do fornecedor, digitado à mão) ou
+  // "taco" (preenchida automaticamente a partir da Tabela TACO — usada pra
+  // hortifruti, cujo fornecedor muda a cada compra mas o valor nutricional
+  // do alimento in natura não muda).
+  const [fonteNutricional, setFonteNutricional] = useState(nutricional?.fonte_nutricional || "manual");
+  const [tacoItemId, setTacoItemId] = useState(nutricional?.taco_item_id || "");
 
   function alterarLinha(idx, campo, valor) {
     setTabela((prev) => prev.map((l, i) => (i === idx ? { ...l, [campo]: valor } : l)));
@@ -527,12 +593,24 @@ function NutricionalMateriaPrima({ mp, fornecedores }) {
     setTabela((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  function preencherComTaco(id) {
+    setTacoItemId(id);
+    const item = tacoDatabase.find((t) => t.id === id);
+    if (!item) return;
+    setPorcaoReferencia(String(item.porcao_referencia_gramas));
+    setIngredientesTexto(item.nome + " (in natura)");
+    setAlergicosTexto("");
+    setTabela(tabelaNutricionalDoItemTaco(item));
+  }
+
   async function salvar() {
     await salvarNutricionalMateriaPrima(mp.id, {
       fornecedor_id: fornecedorId,
       ingredientes_texto: ingredientesTexto,
       alergicos_texto: alergicosTexto,
       porcao_referencia_gramas: parseFloat(porcaoReferencia) || 0,
+      fonte_nutricional: fonteNutricional,
+      taco_item_id: fonteNutricional === "taco" ? tacoItemId : "",
       tabela: tabela
         .filter((l) => l.nutriente.trim())
         .map((l) => ({
@@ -546,6 +624,7 @@ function NutricionalMateriaPrima({ mp, fornecedores }) {
   }
 
   const fornecedorNome = fornecedores.find((f) => f.id === nutricional?.fornecedor_id)?.nome;
+  const tacoItemNome = tacoDatabase.find((t) => t.id === nutricional?.taco_item_id)?.nome;
 
   if (!editando) {
     return (
@@ -560,10 +639,18 @@ function NutricionalMateriaPrima({ mp, fornecedores }) {
         </div>
         {nutricional ? (
           <div className="text-xs space-y-2">
-            <p>
-              <span className="text-muted">Fornecedor: </span>
-              {fornecedorNome || "—"}
-            </p>
+            {nutricional.fonte_nutricional === "taco" ? (
+              <p>
+                <span className="text-muted">Fonte: </span>
+                <span className="text-sage font-medium">Tabela TACO</span>
+                {tacoItemNome ? ` — ${tacoItemNome}` : ""}
+              </p>
+            ) : (
+              <p>
+                <span className="text-muted">Fornecedor: </span>
+                {fornecedorNome || "—"}
+              </p>
+            )}
             {nutricional.ingredientes_texto && <p className="text-muted leading-relaxed">{nutricional.ingredientes_texto}</p>}
             {nutricional.alergicos_texto && <p className="text-brick leading-relaxed">{nutricional.alergicos_texto}</p>}
             {mp.tabela_nutricional?.length > 0 && (
@@ -601,6 +688,48 @@ function NutricionalMateriaPrima({ mp, fornecedores }) {
       <p className="text-xs uppercase tracking-wide text-muted flex items-center gap-1.5">
         <ClipboardList size={13} className="text-gold" /> Nutricional do fornecedor
       </p>
+
+      <Campo label="Fonte da nutricional">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setFonteNutricional("manual")}
+            className={`flex-1 text-xs px-3 py-1.5 rounded-md border ${
+              fonteNutricional === "manual" ? "bg-sage text-white border-sage" : "border-line text-muted"
+            }`}
+          >
+            Rótulo do fornecedor
+          </button>
+          <button
+            type="button"
+            onClick={() => setFonteNutricional("taco")}
+            className={`flex-1 text-xs px-3 py-1.5 rounded-md border ${
+              fonteNutricional === "taco" ? "bg-sage text-white border-sage" : "border-line text-muted"
+            }`}
+          >
+            Tabela TACO (hortifruti)
+          </button>
+        </div>
+      </Campo>
+
+      {fonteNutricional === "taco" && (
+        <Campo label="Item da Tabela TACO">
+          <select
+            value={tacoItemId}
+            onChange={(e) => preencherComTaco(e.target.value)}
+            className="w-full px-2 py-1.5 border border-line rounded-md text-sm"
+          >
+            <option value="">Selecione o alimento...</option>
+            {tacoDatabase.map((item) => (
+              <option key={item.id} value={item.id}>{item.nome}</option>
+            ))}
+          </select>
+          <p className="text-[11px] text-muted mt-1">
+            Ao escolher, os campos abaixo são preenchidos automaticamente com os valores oficiais da TACO (por 100g) e o %VD calculado pela referência da Anvisa. Ainda dá pra ajustar manualmente depois.
+          </p>
+        </Campo>
+      )}
+
       <Campo label="Fornecedor">
         <select
           value={fornecedorId}
