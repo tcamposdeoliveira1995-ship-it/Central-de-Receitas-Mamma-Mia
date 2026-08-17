@@ -1,8 +1,9 @@
-// Base de dados nutricional de hortifruti (Tabela TACO — Tabela Brasileira
-// de Composição de Alimentos, NEPA/UNICAMP), usada para preencher
-// automaticamente a nutricional de matérias-primas in natura (verduras,
-// legumes, temperos) quando a fonte escolhida é "Tabela TACO", em vez do
-// rótulo de um fornecedor específico.
+// Base de dados nutricional (Tabela TACO — Tabela Brasileira de Composição
+// de Alimentos, NEPA/UNICAMP), usada para preencher automaticamente a
+// nutricional de matérias-primas in natura (hortifruti e carnes/aves sem
+// tempero) quando a fonte escolhida é "Tabela TACO", em vez do rótulo de um
+// fornecedor específico — útil porque quem vende muda (CEASA, frigorífico
+// etc.), mas o valor nutricional do alimento in natura não muda.
 //
 // Valores por 100g de parte crua/in natura, conferidos na Tabela TACO
 // (4ª edição, NEPA/UNICAMP) em agosto/2026. "Gorduras saturadas" não consta
@@ -504,6 +505,57 @@ export const tacoDatabase = [
       gorduras_trans_g: 0,
       fibra_alimentar_g: 2.1,
       sodio_mg: "",
+    },
+  },
+  {
+    id: "taco-frango-inteiro",
+    nome: "Frango, inteiro, sem pele, cru",
+    porcao_referencia_gramas: 100,
+    valores: {
+      energia_kcal: 129,
+      carboidratos_g: 0,
+      acucares_totais_g: 0,
+      acucares_adicionados_g: 0,
+      proteinas_g: 20.6,
+      gorduras_totais_g: 4.6,
+      gorduras_saturadas_g: "",
+      gorduras_trans_g: 0,
+      fibra_alimentar_g: 0,
+      sodio_mg: 73,
+    },
+  },
+  {
+    id: "taco-frango-peito",
+    nome: "Frango, peito, sem pele, cru",
+    porcao_referencia_gramas: 100,
+    valores: {
+      energia_kcal: 119,
+      carboidratos_g: 0,
+      acucares_totais_g: 0,
+      acucares_adicionados_g: 0,
+      proteinas_g: 21.5,
+      gorduras_totais_g: 3.0,
+      gorduras_saturadas_g: "",
+      gorduras_trans_g: 0,
+      fibra_alimentar_g: 0,
+      sodio_mg: 56,
+    },
+  },
+  {
+    id: "taco-carne-bovina-acem-moida",
+    nome: "Carne, bovina, acém, moído, cru",
+    porcao_referencia_gramas: 100,
+    valores: {
+      energia_kcal: 137,
+      carboidratos_g: 0,
+      acucares_totais_g: 0,
+      acucares_adicionados_g: 0,
+      proteinas_g: 19.4,
+      gorduras_totais_g: 5.9,
+      gorduras_saturadas_g: "",
+      gorduras_trans_g: 0,
+      fibra_alimentar_g: 0,
+      sodio_mg: 49,
     },
   },
 ];
