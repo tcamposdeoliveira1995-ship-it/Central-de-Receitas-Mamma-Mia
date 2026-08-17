@@ -576,8 +576,8 @@ function NutricionalMateriaPrima({ mp, fornecedores }) {
   );
   // Fonte da nutricional: "manual" (rótulo do fornecedor, digitado à mão) ou
   // "taco" (preenchida automaticamente a partir da Tabela TACO — usada pra
-  // hortifruti, cujo fornecedor muda a cada compra mas o valor nutricional
-  // do alimento in natura não muda).
+  // hortifruti e carnes/aves in natura, cujo fornecedor muda a cada compra
+  // mas o valor nutricional do alimento in natura não muda).
   const [fonteNutricional, setFonteNutricional] = useState(nutricional?.fonte_nutricional || "manual");
   const [tacoItemId, setTacoItemId] = useState(nutricional?.taco_item_id || "");
 
@@ -707,7 +707,7 @@ function NutricionalMateriaPrima({ mp, fornecedores }) {
               fonteNutricional === "taco" ? "bg-sage text-white border-sage" : "border-line text-muted"
             }`}
           >
-            Tabela TACO (hortifruti)
+            Tabela TACO (in natura)
           </button>
         </div>
       </Campo>
