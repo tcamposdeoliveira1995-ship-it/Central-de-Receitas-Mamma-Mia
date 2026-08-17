@@ -638,6 +638,10 @@ export function StoreProvider({ children }) {
         ingredientes_texto: dados.ingredientes_texto || "",
         alergicos_texto: dados.alergicos_texto || "",
         porcao_referencia_gramas: dados.porcao_referencia_gramas || 0,
+        // "manual" (rótulo do fornecedor, digitado à mão) ou "taco" (preenchido
+        // automaticamente a partir da Tabela TACO — ver src/lib/tacoDatabase.js)
+        fonte_nutricional: dados.fonte_nutricional || "manual",
+        taco_item_id: dados.taco_item_id || "",
       };
       setMateriasPrimas((prev) =>
         prev.map((mp) =>
