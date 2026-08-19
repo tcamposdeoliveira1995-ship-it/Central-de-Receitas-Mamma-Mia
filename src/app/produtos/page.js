@@ -88,6 +88,7 @@ function produtoVazio() {
     peso_bruto: "",
     validade_dias: "",
     status: "rascunho",
+    rota_producao: "",
   };
 }
 
@@ -298,7 +299,7 @@ export default function ProdutosPage() {
 }
 
 function ProdutoDetalhe({ produto, onAnterior, onProximo, temAnterior, temProximo, posicaoAtual, totalProdutos }) {
-  const { atualizarDadosProduto, removerProduto } = useStore();
+  const { atualizarDadosProduto, removerProduto, setores } = useStore();
   const [campos, setCampos] = useState(() => ({ ...produtoVazio(), ...produto }));
   const [salvandoDados, setSalvandoDados] = useState(false);
   const [salvoDados, setSalvoDados] = useState(false);
@@ -392,6 +393,23 @@ function ProdutoDetalhe({ produto, onAnterior, onProximo, temAnterior, temProxim
           <Campo label="Peso bruto (g)" value={campos.peso_bruto} onChange={(v) => set("peso_bruto", v)} tipo="number" />
           <Campo label="Validade (dias)" value={campos.validade_dias} onChange={(v) => set("validade_dias", v)} tipo="number" />
           <CampoSelect label="Status" value={campos.status} onChange={(v) => set("status", v)} opcoes={["rascunho", "ativo"]} />
+          <label className="text-xs text-muted block col-span-2">
+            Linha de produção
+            <select
+              value={campos.rota_producao || ""}
+              onChange={(e) => set("rota_producao", e.target.value)}
+              className="mt-1 w-full px-3 py-2 rounded-md border border-line text-sm"
+            >
+              <option value="">Nenhuma</option>
+              {(setores || [])
+                .filter((s) => s.status !== "inativo")
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nome}
+                  </option>
+                ))}
+            </select>
+          </label>
         </div>
 
         <div className="mt-4 flex items-center gap-3">
