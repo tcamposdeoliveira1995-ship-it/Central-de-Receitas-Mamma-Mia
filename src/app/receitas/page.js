@@ -690,6 +690,26 @@ function ReceitaDetalhe({ receita, onAnterior, onProximo, temAnterior, temProxim
               </option>
             ))}
         </select>
+
+        {(() => {
+          const produtosDaReceita = (produtos || []).filter((p) => p.receita_id === receita.id);
+          if (!produtosDaReceita.length) return null;
+          const setoresPorId = {};
+          (setores || []).forEach((s) => (setoresPorId[s.id] = s.nome));
+          return (
+            <div className="mt-2 text-xs text-muted">
+              <p className="mb-1">Produtos (SKUs) que usam essa receita — confira antes de escolher o setor:</p>
+              <ul className="space-y-0.5">
+                {produtosDaReceita.map((p) => (
+                  <li key={p.id}>
+                    • {p.nome_produto || "(sem nome)"}
+                    {p.rota_producao ? ` — ${setoresPorId[p.rota_producao] || p.rota_producao}` : " — sem linha de produção própria"}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })()}
       </div>
 
       <NutricionalReceita receita={receita} />
