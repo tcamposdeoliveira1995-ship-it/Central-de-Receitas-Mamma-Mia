@@ -227,6 +227,7 @@ export default function MateriasPrimasPage() {
               </div>
 
               <ApresentacoesPainel mp={selecionada} />
+              <LotesPainel mp={selecionada} />
               <NutricionalMateriaPrima mp={selecionada} fornecedores={fornecedores} />
             </div>
           )}
@@ -536,6 +537,134 @@ function ApresentacaoCard({ mp, apresentacao, expandida, onToggle, onAdicionarRe
               <Plus size={12} /> Novo teste de rendimento
             </button>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── LOTES DE MATÉRIA-PRIMA (rastreabilidade / FEFO) ─────────────────
+// Cada recebimento vira um lote com validade e saldo disponível. É esse
+// saldo que o painel operacional mobile (apontamento de produção) consulta
+// pra deixar quem produz escolher o lote — sempre sugerindo primeiro o que
+// vence mais cedo (FEFO). Cadastro simples aqui, sem custo/preço: quem
+// controla o preço de compra continua sendo o preço da matéria-prima em si
+// (topo da tela), não o lote.
+function LotesPainel({ mp }) {
+  const { adicionarLoteMateriaPrima } = useStore();
+  const [criando, setCriando] = useState(false);
+  const [form, setForm] = useState({ lote: "", fornecedor: "", quantidade_recebida: "", validade: "" });
+
+  const lotes = (mp.lotes || [])
+    .slice()
+    .sort((a, b) => new Date(a.validade || "9999-12-31") - new Date(b.validade || "9999-12-31"));
+
+  function set(campo, valor) {
+    setForm((prev) => ({ ...prev, [campo]: valor }));
+  }
+
+  async function salvar() {
+    if (!form.lote.trim() || !form.quantidade_recebida) return;
+    await adicionarLoteMateriaPrima(mp.id, {
+      lote: form.lote,
+      fornecedor: form.fornecedor,
+      quantidade_recebida: parseFloat(form.quantidade_recebida.replace(",", ".")) || 0,
+      validade: form.validade,
+    });
+    setForm({ lote: "", fornecedor: "", quantidade_recebida: "", validade: "" });
+    setCriando(false);
+  }
+
+  function statusLote(l) {
+    const disponivel = Number(l.quantidade_disponivel) || 0;
+    if (disponivel <= 0) return { texto: "Esgotado", classe: "text-muted" };
+    if (l.validade) {
+      const dias = Math.ceil((new Date(l.validade) - new Date()) / (1000 * 60 * 60 * 24));
+      if (dias < 0) return { texto: "Vencido", classe: "text-red-600" };
+      if (dias <= 3) return { texto: `Vence em ${dias}d`, classe: "text-amber-600" };
+    }
+    return { texto: "Disponível", classe: "text-sage" };
+  }
+
+  return (
+    <div className="mt-5 pt-4 border-t border-line">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs uppercase tracking-wide text-muted">Lotes recebidos</p>
+        <button onClick={() => setCriando((v) => !v)} className="text-xs text-sage hover:underline flex items-center gap-1">
+          <Plus size={12} /> Registrar recebimento
+        </button>
+      </div>
+      <p className="text-xs text-muted mb-3">
+        Cada recebimento vira um lote com validade — é o que alimenta o painel de apontamento de produção (FEFO:
+        sempre sugere o lote que vence primeiro).
+      </p>
+
+      {criando && (
+        <div className="border border-line rounded-md p-3 mb-3 space-y-2">
+          <Campo label="Lote">
+            <input
+              value={form.lote}
+              onChange={(e) => set("lote", e.target.value)}
+              placeholder="Do fornecedor, ou um código seu"
+              className="w-full px-2 py-1.5 rounded-md border border-line text-sm"
+            />
+          </Campo>
+          <Campo label="Fornecedor (opcional)">
+            <input
+              value={form.fornecedor}
+              onChange={(e) => set("fornecedor", e.target.value)}
+              className="w-full px-2 py-1.5 rounded-md border border-line text-sm"
+            />
+          </Campo>
+          <Campo label={`Quantidade recebida (${mp.unidade || "un"})`}>
+            <input
+              value={form.quantidade_recebida}
+              onChange={(e) => set("quantidade_recebida", e.target.value)}
+              placeholder="Ex: 50"
+              className="w-full px-2 py-1.5 rounded-md border border-line text-sm font-mono-num"
+            />
+          </Campo>
+          <Campo label="Validade">
+            <input
+              type="date"
+              value={form.validade}
+              onChange={(e) => set("validade", e.target.value)}
+              className="w-full px-2 py-1.5 rounded-md border border-line text-sm"
+            />
+          </Campo>
+          <div className="flex gap-2">
+            <button onClick={salvar} className="text-xs px-3 py-1.5 bg-sage text-white rounded-md hover:opacity-90">
+              Salvar lote
+            </button>
+            <button onClick={() => setCriando(false)} className="text-xs px-3 py-1.5 border border-line rounded-md">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {lotes.length === 0 && !criando && (
+        <p className="text-xs text-muted italic">Nenhum lote registrado ainda.</p>
+      )}
+
+      {lotes.length > 0 && (
+        <div className="space-y-1.5">
+          {lotes.map((l) => {
+            const status = statusLote(l);
+            return (
+              <div key={l.id} className="flex items-center justify-between text-xs border border-line rounded-md px-3 py-2">
+                <div>
+                  <span className="font-mono-num font-medium">{l.lote}</span>
+                  {l.fornecedor && <span className="text-muted"> — {l.fornecedor}</span>}
+                  <div className="text-muted mt-0.5">
+                    Validade: {l.validade || "—"} · Disponível: {formatNumber(l.quantidade_disponivel)} de{" "}
+                    {formatNumber(l.quantidade_recebida)} {mp.unidade || ""}
+                  </div>
+                </div>
+                <span className={`font-medium ${status.classe}`}>{status.texto}</span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
