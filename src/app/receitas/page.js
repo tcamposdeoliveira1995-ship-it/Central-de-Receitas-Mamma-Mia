@@ -1060,6 +1060,7 @@ function produtoVazio() {
     peso_bruto: "",
     validade_dias: "",
     status: "rascunho",
+    rota_producao: "",
   };
 }
 
@@ -1111,7 +1112,7 @@ function camposFaltantesProduto(produto) {
   return faltando;
 }
 
-function CamposProduto({ valores, onChange, mostrarStatus = false }) {
+function CamposProduto({ valores, onChange, mostrarStatus = false, setores = [] }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
       {mostrarStatus && (
@@ -1165,6 +1166,22 @@ function CamposProduto({ valores, onChange, mostrarStatus = false }) {
       </CampoProduto>
       <CampoProduto label="Validade (dias)">
         <input type="number" value={valores.validade_dias} onChange={(e) => onChange({ ...valores, validade_dias: e.target.value })} className="w-full px-2 py-1.5 border border-line rounded-md text-xs" />
+      </CampoProduto>
+      <CampoProduto label="Linha de produção" className="col-span-2">
+        <select
+          value={valores.rota_producao || ""}
+          onChange={(e) => onChange({ ...valores, rota_producao: e.target.value })}
+          className="w-full px-2 py-1.5 border border-line rounded-md text-xs"
+        >
+          <option value="">Nenhuma</option>
+          {setores
+            .filter((s) => s.status !== "inativo")
+            .map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nome}
+              </option>
+            ))}
+        </select>
       </CampoProduto>
     </div>
   );
@@ -1344,7 +1361,7 @@ function ProdutosSKU({ receitaId, produtos, cmvUnitario, quantidadeProducao, fun
 
       {adicionando && (
         <div className="mt-3 bg-gold-soft/20 border border-gold/30 rounded-lg p-3">
-          <CamposProduto valores={novo} onChange={setNovo} />
+          <CamposProduto valores={novo} onChange={setNovo} setores={setores} />
           <div className="flex justify-end gap-2 mt-2">
             <button
               type="button"
@@ -1573,7 +1590,7 @@ function ProdutoItem({ receitaId, produto, cmvUnitario, quantidadeProducao, func
           </div>
 
           {editando ? (
-            <CamposProduto valores={campos} onChange={setCampos} mostrarStatus />
+            <CamposProduto valores={campos} onChange={setCampos} mostrarStatus setores={setores} />
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
               <InfoLinha label="Código de barras" valor={produto.codigo_barras} />
