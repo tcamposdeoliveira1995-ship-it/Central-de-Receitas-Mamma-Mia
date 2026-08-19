@@ -201,6 +201,28 @@ export function StoreProvider({ children }) {
     return criado;
   }, []);
 
+  const adicionarLoteMateriaPrima = useCallback(async (materiaPrimaId, dados) => {
+    if (!isDemoMode) {
+      const criado = await postAction("addLoteMateriaPrima", { materia_prima_id: materiaPrimaId, ...dados });
+      setMateriasPrimas((prev) =>
+        prev.map((mp) => (mp.id === materiaPrimaId ? { ...mp, lotes: [...(mp.lotes || []), criado] } : mp))
+      );
+      return criado;
+    }
+    const criado = {
+      id: `lotemp-${Date.now()}`,
+      materia_prima_id: materiaPrimaId,
+      data_recebimento: new Date().toISOString().slice(0, 10),
+      quantidade_disponivel: dados.quantidade_recebida || 0,
+      status: "ativo",
+      ...dados,
+    };
+    setMateriasPrimas((prev) =>
+      prev.map((mp) => (mp.id === materiaPrimaId ? { ...mp, lotes: [...(mp.lotes || []), criado] } : mp))
+    );
+    return criado;
+  }, []);
+
   const adicionarReceita = useCallback(async (nova) => {
     if (!isDemoMode) {
       const criada = await postAction("addReceita", nova);
@@ -798,6 +820,7 @@ export function StoreProvider({ children }) {
     adicionarMateriaPrima,
     adicionarApresentacao,
     adicionarRendimentoMP,
+    adicionarLoteMateriaPrima,
     adicionarReceita,
     excluirReceita,
     atualizarItensReceita,
