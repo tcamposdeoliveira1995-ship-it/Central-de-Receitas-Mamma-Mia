@@ -323,6 +323,21 @@ export function StoreProvider({ children }) {
     [enfileirar]
   );
 
+  // Linha de produção (Setor) da receita — usada só pelo painel mobile pra
+  // filtrar quais receitas aparecem depois de escolher a Empresa. Reaproveita
+  // a mesma aba/cadastro de Setores do MOD/HHT, só guarda o id escolhido.
+  const atualizarRotaProducaoReceita = useCallback(
+    async (receitaId, rotaProducao) => {
+      setReceitas((prev) => prev.map((r) => (r.id === receitaId ? { ...r, rota_producao: rotaProducao } : r)));
+      if (!isDemoMode) {
+        await enfileirar(`rota:${receitaId}`, () =>
+          postAction("updateRotaProducaoReceita", { receita_id: receitaId, rota_producao: rotaProducao })
+        );
+      }
+    },
+    [enfileirar]
+  );
+
   // ── MOD/HHT ESTIMADO DA RECEITA (lista de funções) ────────────────
   // Recebe itens: [{ setor_id, funcao_id, quantidade_pessoas, tempo_minutos }]
   // — pode ter mais de uma função/setor (ex: Auxiliar na Expedição + Assistente
@@ -827,6 +842,7 @@ export function StoreProvider({ children }) {
     enviarFichaPdf,
     atualizarRendimentoReceita,
     atualizarDetalhesReceita,
+    atualizarRotaProducaoReceita,
     atualizarMODReceita,
     atualizarMODProducao,
     adicionarProducao,
