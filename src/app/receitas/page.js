@@ -261,6 +261,7 @@ function ReceitaDetalhe({ receita, onAnterior, onProximo, temAnterior, temProxim
     adicionarMateriaPrima,
     enviarFichaPdf,
     atualizarDetalhesReceita,
+    atualizarRotaProducaoReceita,
     excluirReceita,
   } = useStore();
   const [itens, setItens] = useState(() => backfillLinhaId(receita.itens || []));
@@ -668,6 +669,27 @@ function ReceitaDetalhe({ receita, onAnterior, onProximo, temAnterior, temProxim
             );
           })}
         </div>
+      </div>
+
+      <div className="mt-4">
+        <p className="text-xs uppercase tracking-wide text-muted mb-1.5">
+          Linha de produção
+          <span className="normal-case text-muted/70"> — pra filtrar essa receita no apontamento mobile</span>
+        </p>
+        <select
+          value={receita.rota_producao || ""}
+          onChange={(e) => atualizarRotaProducaoReceita(receita.id, e.target.value)}
+          className="w-full max-w-sm px-2 py-1.5 rounded-md border border-line text-sm bg-surface"
+        >
+          <option value="">Nenhuma (não aparece no apontamento mobile)</option>
+          {(setores || [])
+            .filter((s) => s.status !== "inativo")
+            .map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nome}
+              </option>
+            ))}
+        </select>
       </div>
 
       <NutricionalReceita receita={receita} />
