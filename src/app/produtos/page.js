@@ -93,9 +93,10 @@ function produtoVazio() {
 }
 
 export default function ProdutosPage() {
-  const { produtos, criarProduto } = useStore();
+  const { produtos, criarProduto, setores } = useStore();
   const [selecionadoId, setSelecionadoId] = useState(produtos[0]?.id ?? null);
   const [busca, setBusca] = useState("");
+  const [filtroRota, setFiltroRota] = useState("");
   const [criando, setCriando] = useState(false);
   const [novo, setNovo] = useState(produtoVazio());
   const [salvandoNovo, setSalvandoNovo] = useState(false);
@@ -113,8 +114,13 @@ export default function ProdutosPage() {
           normalizarTexto(p.nome_produto).includes(buscaNormalizada) ||
           normalizarTexto(p.codigo).includes(buscaNormalizada)
       )
+      .filter((p) => {
+        if (!filtroRota) return true;
+        if (filtroRota === "__sem__") return !p.rota_producao;
+        return p.rota_producao === filtroRota;
+      })
       .sort((a, b) => (a.nome_produto || "").localeCompare(b.nome_produto || "", "pt-BR", { sensitivity: "base" }));
-  }, [produtos, busca]);
+  }, [produtos, busca, filtroRota]);
 
   const indiceAtual = produtosFiltrados.findIndex((p) => p.id === selecionadoId);
   const temAnterior = indiceAtual > 0;
@@ -249,6 +255,23 @@ export default function ProdutosPage() {
               >
                 <ChevronsLeft size={14} />
               </button>
+            </div>
+            <div className="px-3 pb-3 border-b border-line">
+              <select
+                value={filtroRota}
+                onChange={(e) => setFiltroRota(e.target.value)}
+                className="w-full px-2 py-1.5 rounded-md border border-line text-xs bg-surface"
+              >
+                <option value="">Todas as linhas de produção</option>
+                <option value="__sem__">Sem linha de produção</option>
+                {(setores || [])
+                  .filter((s) => s.status !== "inativo")
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.nome}
+                    </option>
+                  ))}
+              </select>
             </div>
             <ul>
               {produtosFiltrados.map((p) => (
