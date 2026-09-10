@@ -222,6 +222,52 @@ function abaComoObjetos_(ss, nomeAba) {
   });
 }
 
+// Lê TODAS as abas de uma vez só, num único request HTTP pra API do Sheets
+// (Sheets.Spreadsheets.Values.batchGet), em vez de uma chamada SpreadsheetApp
+// por aba — no doGet original, isso significava ~20 chamadas sequenciais
+// (cada uma com sua própria latência de rede/serviço), o que ficou lento
+// demais com a planilha real e chegava a estourar o tempo de execução do
+// Apps Script (a chamada nunca voltava pro navegador). Um batchGet só é
+// UM request, então o tempo não cresce com o número de abas.
+//
+// Precisa do serviço avançado "Google Sheets API" habilitado no projeto
+// (menu Serviços > + > Google Sheets API). Se não estiver habilitado (ou
+// falhar por qualquer motivo), cai automaticamente no jeito aba-por-aba de
+// antes — mais lento, mas sempre funciona, então nunca quebra por causa
+// dessa otimização.
+function lerTodasAsAbasEmLote_(ss) {
+  const nomesAbas = Object.keys(ABAS);
+  try {
+    const resposta = Sheets.Spreadsheets.Values.batchGet(ss.getId(), { ranges: nomesAbas });
+    const lote = {};
+    (resposta.valueRanges || []).forEach((intervalo, i) => {
+      lote[nomesAbas[i]] = intervalo.values || [];
+    });
+    return lote;
+  } catch (erro) {
+    const lote = {};
+    nomesAbas.forEach((nome) => {
+      const aba = ss.getSheetByName(nome);
+      lote[nome] = aba ? aba.getDataRange().getValues() : [];
+    });
+    return lote;
+  }
+}
+
+// Mesma lógica de abaComoObjetos_, mas lendo de um lote já carregado em
+// memória (ver lerTodasAsAbasEmLote_) em vez de fazer uma chamada nova à
+// planilha — usado só no doGet, que precisa de todas as abas de uma vez.
+function abaComoObjetosDoLote_(lote, nomeAba) {
+  const valores = lote[nomeAba] || [];
+  if (valores.length === 0) return [];
+  const cabecalho = valores[0];
+  return valores.slice(1).map((linha) => {
+    const obj = {};
+    cabecalho.forEach((chave, i) => (obj[chave] = linha[i]));
+    return obj;
+  });
+}
+
 // Insere UMA linha nova a partir de um objeto {coluna: valor} — a ordem das
 // células é montada dinamicamente a partir do cabeçalho real da aba, então
 // nunca desalinha mesmo que ABAS ganhe colunas novas no meio do caminho.
@@ -394,27 +440,29 @@ function montarProdutoCompleto_(p, composicaoRaw, produtoModRaw, funcionarios, s
 function doGet(e) {
   try {
     const ss = planilha_();
+    const lote = lerTodasAsAbasEmLote_(ss);
+    const aba = (nome) => abaComoObjetosDoLote_(lote, nome);
 
-    const categorias = abaComoObjetos_(ss, "Categorias");
-    const fornecedores = abaComoObjetos_(ss, "Fornecedores");
-    const setores = abaComoObjetos_(ss, "Setores");
-    const funcionarios = abaComoObjetos_(ss, "Funcionarios");
-    const materiasPrimasRaw = abaComoObjetos_(ss, "MateriasPrimas");
-    const historico = abaComoObjetos_(ss, "HistoricoPrecos");
-    const apresentacoes = abaComoObjetos_(ss, "Apresentacoes");
-    const rendimentosMP = abaComoObjetos_(ss, "RendimentosMP");
-    const lotes = abaComoObjetos_(ss, "LotesMateriaPrima");
-    const receitasRaw = abaComoObjetos_(ss, "Receitas");
-    const itensRaw = abaComoObjetos_(ss, "ReceitaItens");
-    const receitaModRaw = abaComoObjetos_(ss, "ReceitaMOD");
-    const receitaPdfs = abaComoObjetos_(ss, "ReceitaPDFs");
-    const producoesRaw = abaComoObjetos_(ss, "Producoes");
-    const producaoModRaw = abaComoObjetos_(ss, "ProducaoMOD");
-    const coccoesRaw = abaComoObjetos_(ss, "Coccoes");
-    const recheiosRaw = abaComoObjetos_(ss, "RecheiosFrios");
-    const produtosRaw = abaComoObjetos_(ss, "Produtos");
-    const composicaoRaw = abaComoObjetos_(ss, "ProdutoComposicao");
-    const produtoModRaw = abaComoObjetos_(ss, "ProdutoMOD");
+    const categorias = aba("Categorias");
+    const fornecedores = aba("Fornecedores");
+    const setores = aba("Setores");
+    const funcionarios = aba("Funcionarios");
+    const materiasPrimasRaw = aba("MateriasPrimas");
+    const historico = aba("HistoricoPrecos");
+    const apresentacoes = aba("Apresentacoes");
+    const rendimentosMP = aba("RendimentosMP");
+    const lotes = aba("LotesMateriaPrima");
+    const receitasRaw = aba("Receitas");
+    const itensRaw = aba("ReceitaItens");
+    const receitaModRaw = aba("ReceitaMOD");
+    const receitaPdfs = aba("ReceitaPDFs");
+    const producoesRaw = aba("Producoes");
+    const producaoModRaw = aba("ProducaoMOD");
+    const coccoesRaw = aba("Coccoes");
+    const recheiosRaw = aba("RecheiosFrios");
+    const produtosRaw = aba("Produtos");
+    const composicaoRaw = aba("ProdutoComposicao");
+    const produtoModRaw = aba("ProdutoMOD");
 
     const materiasPrimas = materiasPrimasRaw.map((mp) => ({
       id: mp.id,
